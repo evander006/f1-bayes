@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/models/openf1_models.dart';
@@ -221,8 +223,6 @@ class AppContextCubit extends Cubit<AppContextState> {
     final year = state.latestSession?.year ?? DateTime.now().year;
     final completed = <Session>[];
 
-    // Use several seasons. Ten races are too small for stable conditional
-    // probabilities, especially for rain, pole and grid buckets.
     for (var y = year; y >= 2020 && completed.length < 50; y--) {
       try {
         completed.addAll(await _completedRaces(y));
@@ -238,8 +238,6 @@ class AppContextCubit extends Cubit<AppContextState> {
     final evidence = <RaceEvidence>[];
     final accuracyRows = <RaceAccuracy>[];
 
-    // Walk chronologically. A race is evaluated only with information that
-    // existed before that race, preventing data leakage from future results.
     for (final race in sample) {
       try {
         final results = await repository.sessionResults(sessionKey: race.sessionKey);
@@ -257,9 +255,6 @@ class AppContextCubit extends Cubit<AppContextState> {
             if (gridMap.containsKey(driver.driverNumber)) historicalDrivers.add(driver);
           }
 
-          // Accuracy is optional and should never block the main dashboard.
-          // It is calculated only when the current driver metadata overlaps
-          // the historical grid.
           if (historicalDrivers.isNotEmpty) {
             final predicted = NaiveBayesPredictor().predict(
               drivers: historicalDrivers,
@@ -273,14 +268,17 @@ class AppContextCubit extends Cubit<AppContextState> {
                 final y = p.driver.driverNumber == winner ? 1.0 : 0.0;
                 return sum + math.pow(p.winProbability - y, 2).toDouble();
               });
-              accuracyRows.add(RaceAccuracy(
-                meeting: _meetingFor(race.meetingKey),
-                predictedWinner: predicted.first.driver,
-                actualWinner: winnerPrediction.first.driver,
-                top3Predicted: predicted.take(3).map((p) => p.driver).toList(),
-                brierScore: brier,
-                hit: predicted.first.driver.driverNumber == winner,
-              ));
+              final meeting = _meetingFor(race.meetingKey);
+              if (meeting != null) {
+                accuracyRows.add(RaceAccuracy(
+                  meeting: meeting,
+                  predictedWinner: predicted.first.driver,
+                  actualWinner: winnerPrediction.first.driver,
+                  top3Predicted: predicted.take(3).map((p) => p.driver).toList(),
+                  brierScore: brier,
+                  hit: predicted.first.driver.driverNumber == winner,
+                ));
+              }
             }
           }
         }
