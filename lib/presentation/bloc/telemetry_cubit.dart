@@ -34,15 +34,20 @@ class TelemetryCubit extends Cubit<TelemetryState> {
     _inFlight = true;
     emit(TelemetryState(status: LoadStatus.loading, driverNumber: driverNumber));
     try {
+      // The API's `date>` filter is relative to the beginning of the query,
+      // so use the end of the session only to select the latest data window.
+      // The previous implementation queried `sessionEnd - 2 min`, which could
+      // return only a tiny tail or no data at all for older sessions.
       final end = sessionEnd.isBefore(DateTime.now().toUtc())
           ? sessionEnd.toUtc()
           : DateTime.now().toUtc();
+      final start = end.subtract(const Duration(minutes: 2));
       final data = await _repo.carData(
         sessionKey: sessionKey,
         driverNumber: driverNumber,
-        dateGt: end.subtract(const Duration(minutes: 2)).toIso8601String(),
+        dateGt: start.toIso8601String(),
       );
-      final clipped = data.length > 80 ? data.sublist(data.length - 80) : data;
+      final clipped = data.length > 200 ? data.sublist(data.length - 200) : data;
       emit(TelemetryState(
         status: clipped.isEmpty ? LoadStatus.empty : LoadStatus.success,
         driverNumber: driverNumber,
