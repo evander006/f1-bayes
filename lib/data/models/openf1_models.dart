@@ -1,4 +1,4 @@
-// Models matching OpenF1 API JSON fields: https://openf1.org/docs/
+import '../json_parse.dart';
 
 class Meeting {
   const Meeting({
@@ -42,24 +42,24 @@ class Meeting {
   final int year;
 
   factory Meeting.fromJson(Map<String, dynamic> json) => Meeting(
-        circuitKey: json['circuit_key'] as int,
-        circuitInfoUrl: json['circuit_info_url'] as String?,
-        circuitImage: json['circuit_image'] as String?,
-        circuitShortName: json['circuit_short_name'] as String,
-        circuitType: json['circuit_type'] as String?,
-        countryCode: json['country_code'] as String,
-        countryFlag: json['country_flag'] as String?,
-        countryKey: json['country_key'] as int,
-        countryName: json['country_name'] as String,
-        dateEnd: DateTime.parse(json['date_end'] as String),
-        dateStart: DateTime.parse(json['date_start'] as String),
-        gmtOffset: json['gmt_offset'] as String,
-        isCancelled: json['is_cancelled'] as bool? ?? false,
-        location: json['location'] as String,
-        meetingKey: json['meeting_key'] as int,
-        meetingName: json['meeting_name'] as String,
-        meetingOfficialName: json['meeting_official_name'] as String,
-        year: json['year'] as int,
+        circuitKey: asInt(json['circuit_key']) ?? 0,
+        circuitInfoUrl: asString(json['circuit_info_url']),
+        circuitImage: asString(json['circuit_image']),
+        circuitShortName: asString(json['circuit_short_name']) ?? '',
+        circuitType: asString(json['circuit_type']),
+        countryCode: asString(json['country_code']) ?? '',
+        countryFlag: asString(json['country_flag']),
+        countryKey: asInt(json['country_key']) ?? 0,
+        countryName: asString(json['country_name']) ?? '',
+        dateEnd: asDate(json['date_end']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        dateStart: asDate(json['date_start']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        gmtOffset: asString(json['gmt_offset']) ?? '',
+        isCancelled: asBool(json['is_cancelled']),
+        location: asString(json['location']) ?? '',
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        meetingName: asString(json['meeting_name']) ?? '',
+        meetingOfficialName: asString(json['meeting_official_name']) ?? '',
+        year: asInt(json['year']) ?? 0,
       );
 }
 
@@ -98,22 +98,26 @@ class Session {
   final String sessionType;
   final int year;
 
+  bool get isRace => sessionName == 'Race' || sessionType == 'Race';
+  bool get isQualifying =>
+      sessionName.contains('Qualifying') || sessionType.contains('Qualifying');
+
   factory Session.fromJson(Map<String, dynamic> json) => Session(
-        circuitKey: json['circuit_key'] as int,
-        circuitShortName: json['circuit_short_name'] as String,
-        countryCode: json['country_code'] as String,
-        countryKey: json['country_key'] as int,
-        countryName: json['country_name'] as String,
-        dateEnd: DateTime.parse(json['date_end'] as String),
-        dateStart: DateTime.parse(json['date_start'] as String),
-        gmtOffset: json['gmt_offset'] as String,
-        isCancelled: json['is_cancelled'] as bool? ?? false,
-        location: json['location'] as String,
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        sessionName: json['session_name'] as String,
-        sessionType: json['session_type'] as String,
-        year: json['year'] as int,
+        circuitKey: asInt(json['circuit_key']) ?? 0,
+        circuitShortName: asString(json['circuit_short_name']) ?? '',
+        countryCode: asString(json['country_code']) ?? '',
+        countryKey: asInt(json['country_key']) ?? 0,
+        countryName: asString(json['country_name']) ?? '',
+        dateEnd: asDate(json['date_end']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        dateStart: asDate(json['date_start']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        gmtOffset: asString(json['gmt_offset']) ?? '',
+        isCancelled: asBool(json['is_cancelled']),
+        location: asString(json['location']) ?? '',
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        sessionName: asString(json['session_name']) ?? '',
+        sessionType: asString(json['session_type']) ?? '',
+        year: asInt(json['year']) ?? 0,
       );
 }
 
@@ -128,8 +132,9 @@ class Driver {
     required this.meetingKey,
     required this.nameAcronym,
     required this.sessionKey,
-    required this.teamColour,
+    this.teamColour,
     required this.teamName,
+    this.countryCode,
   });
 
   final String broadcastName;
@@ -141,25 +146,30 @@ class Driver {
   final int meetingKey;
   final String nameAcronym;
   final int sessionKey;
-  final String teamColour;
+  final String? teamColour;
   final String teamName;
+  final String? countryCode;
 
-  String get shortName => '${firstName[0]}. $lastName';
+  String get shortName {
+    if (firstName.isEmpty) return lastName;
+    return '${firstName[0]}. $lastName';
+  }
 
-  int get teamColorValue => int.parse('FF$teamColour', radix: 16);
+  int get teamColorValue => parseTeamColorValue(teamColour);
 
   factory Driver.fromJson(Map<String, dynamic> json) => Driver(
-        broadcastName: json['broadcast_name'] as String,
-        driverNumber: json['driver_number'] as int,
-        firstName: json['first_name'] as String,
-        fullName: json['full_name'] as String,
-        headshotUrl: json['headshot_url'] as String?,
-        lastName: json['last_name'] as String,
-        meetingKey: json['meeting_key'] as int,
-        nameAcronym: json['name_acronym'] as String,
-        sessionKey: json['session_key'] as int,
-        teamColour: json['team_colour'] as String,
-        teamName: json['team_name'] as String,
+        broadcastName: asString(json['broadcast_name']) ?? '',
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        firstName: asString(json['first_name']) ?? '',
+        fullName: asString(json['full_name']) ?? '',
+        headshotUrl: asString(json['headshot_url']),
+        lastName: asString(json['last_name']) ?? '',
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        nameAcronym: asString(json['name_acronym']) ?? '',
+        sessionKey: asInt(json['session_key']) ?? 0,
+        teamColour: asString(json['team_colour']),
+        teamName: asString(json['team_name']) ?? '',
+        countryCode: asString(json['country_code']),
       );
 }
 
@@ -168,39 +178,39 @@ class Weather {
     required this.meetingKey,
     required this.sessionKey,
     required this.date,
-    required this.airTemperature,
-    required this.trackTemperature,
-    required this.humidity,
-    required this.pressure,
-    required this.rainfall,
-    required this.windDirection,
-    required this.windSpeed,
+    this.airTemperature,
+    this.trackTemperature,
+    this.humidity,
+    this.pressure,
+    this.rainfall,
+    this.windDirection,
+    this.windSpeed,
   });
 
   final int meetingKey;
   final int sessionKey;
   final DateTime date;
-  final double airTemperature;
-  final double trackTemperature;
-  final double humidity;
-  final double pressure;
-  final int rainfall;
-  final int windDirection;
-  final double windSpeed;
+  final double? airTemperature;
+  final double? trackTemperature;
+  final double? humidity;
+  final double? pressure;
+  final int? rainfall;
+  final int? windDirection;
+  final double? windSpeed;
 
-  bool get isWet => rainfall > 0;
+  bool get isWet => (rainfall ?? 0) > 0;
 
   factory Weather.fromJson(Map<String, dynamic> json) => Weather(
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        date: DateTime.parse(json['date'] as String),
-        airTemperature: (json['air_temperature'] as num).toDouble(),
-        trackTemperature: (json['track_temperature'] as num).toDouble(),
-        humidity: (json['humidity'] as num).toDouble(),
-        pressure: (json['pressure'] as num).toDouble(),
-        rainfall: (json['rainfall'] as num).toInt(),
-        windDirection: json['wind_direction'] as int,
-        windSpeed: (json['wind_speed'] as num).toDouble(),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        airTemperature: asDouble(json['air_temperature']),
+        trackTemperature: asDouble(json['track_temperature']),
+        humidity: asDouble(json['humidity']),
+        pressure: asDouble(json['pressure']),
+        rainfall: asInt(json['rainfall']),
+        windDirection: asInt(json['wind_direction']),
+        windSpeed: asDouble(json['wind_speed']),
       );
 }
 
@@ -236,26 +246,23 @@ class SessionResult {
     double? duration;
     List<double?>? qualifyingDurations;
     if (rawDuration is List) {
-      qualifyingDurations = rawDuration
-          .map((e) => e == null ? null : (e as num).toDouble())
-          .toList();
-    } else if (rawDuration is num) {
-      duration = rawDuration.toDouble();
+      qualifyingDurations = rawDuration.map(asDouble).toList();
+    } else {
+      duration = asDouble(rawDuration);
     }
 
-    final rawGap = json['gap_to_leader'];
     return SessionResult(
-      dnf: json['dnf'] as bool? ?? false,
-      dns: json['dns'] as bool? ?? false,
-      dsq: json['dsq'] as bool? ?? false,
-      driverNumber: json['driver_number'] as int,
+      dnf: asBool(json['dnf']),
+      dns: asBool(json['dns']),
+      dsq: asBool(json['dsq']),
+      driverNumber: asInt(json['driver_number']) ?? 0,
       duration: duration,
       qualifyingDurations: qualifyingDurations,
-      gapToLeader: rawGap?.toString(),
-      numberOfLaps: json['number_of_laps'] as int?,
-      meetingKey: json['meeting_key'] as int,
-      position: json['position'] as int,
-      sessionKey: json['session_key'] as int,
+      gapToLeader: json['gap_to_leader']?.toString(),
+      numberOfLaps: asInt(json['number_of_laps']),
+      meetingKey: asInt(json['meeting_key']) ?? 0,
+      position: asInt(json['position']) ?? 0,
+      sessionKey: asInt(json['session_key']) ?? 0,
     );
   }
 }
@@ -278,11 +285,11 @@ class StartingGrid {
   bool get isPole => position == 1;
 
   factory StartingGrid.fromJson(Map<String, dynamic> json) => StartingGrid(
-        position: json['position'] as int,
-        driverNumber: json['driver_number'] as int,
-        lapDuration: (json['lap_duration'] as num?)?.toDouble(),
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
+        position: asInt(json['position']) ?? 0,
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        lapDuration: asDouble(json['lap_duration']),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
       );
 }
 
@@ -302,11 +309,11 @@ class Position {
   final int position;
 
   factory Position.fromJson(Map<String, dynamic> json) => Position(
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        driverNumber: json['driver_number'] as int,
-        date: DateTime.parse(json['date'] as String),
-        position: json['position'] as int,
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        position: asInt(json['position']) ?? 0,
       );
 }
 
@@ -328,12 +335,12 @@ class Interval {
   final double? interval;
 
   factory Interval.fromJson(Map<String, dynamic> json) => Interval(
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        driverNumber: json['driver_number'] as int,
-        date: DateTime.parse(json['date'] as String),
-        gapToLeader: (json['gap_to_leader'] as num?)?.toDouble(),
-        interval: (json['interval'] as num?)?.toDouble(),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        gapToLeader: asDouble(json['gap_to_leader']),
+        interval: asDouble(json['interval']),
       );
 }
 
@@ -348,6 +355,9 @@ class Lap {
     this.durationSector2,
     this.durationSector3,
     this.isPitOutLap = false,
+    this.i1Speed,
+    this.i2Speed,
+    this.stSpeed,
   });
 
   final int meetingKey;
@@ -359,17 +369,23 @@ class Lap {
   final double? durationSector2;
   final double? durationSector3;
   final bool isPitOutLap;
+  final double? i1Speed;
+  final double? i2Speed;
+  final double? stSpeed;
 
   factory Lap.fromJson(Map<String, dynamic> json) => Lap(
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        driverNumber: json['driver_number'] as int,
-        lapNumber: json['lap_number'] as int,
-        lapDuration: (json['lap_duration'] as num?)?.toDouble(),
-        durationSector1: (json['duration_sector_1'] as num?)?.toDouble(),
-        durationSector2: (json['duration_sector_2'] as num?)?.toDouble(),
-        durationSector3: (json['duration_sector_3'] as num?)?.toDouble(),
-        isPitOutLap: json['is_pit_out_lap'] as bool? ?? false,
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        lapNumber: asInt(json['lap_number']) ?? 0,
+        lapDuration: asDouble(json['lap_duration']),
+        durationSector1: asDouble(json['duration_sector_1']),
+        durationSector2: asDouble(json['duration_sector_2']),
+        durationSector3: asDouble(json['duration_sector_3']),
+        isPitOutLap: asBool(json['is_pit_out_lap']),
+        i1Speed: asDouble(json['i1_speed']),
+        i2Speed: asDouble(json['i2_speed']),
+        stSpeed: asDouble(json['st_speed']),
       );
 }
 
@@ -381,8 +397,8 @@ class Stint {
     required this.stintNumber,
     required this.lapStart,
     this.lapEnd,
-    required this.compound,
-    required this.tyreAgeAtStart,
+    this.compound,
+    this.tyreAgeAtStart,
   });
 
   final int meetingKey;
@@ -391,57 +407,57 @@ class Stint {
   final int stintNumber;
   final int lapStart;
   final int? lapEnd;
-  final String compound;
-  final int tyreAgeAtStart;
+  final String? compound;
+  final int? tyreAgeAtStart;
 
   factory Stint.fromJson(Map<String, dynamic> json) => Stint(
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        driverNumber: json['driver_number'] as int,
-        stintNumber: json['stint_number'] as int,
-        lapStart: json['lap_start'] as int,
-        lapEnd: json['lap_end'] as int?,
-        compound: json['compound'] as String,
-        tyreAgeAtStart: json['tyre_age_at_start'] as int,
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        stintNumber: asInt(json['stint_number']) ?? 0,
+        lapStart: asInt(json['lap_start']) ?? 0,
+        lapEnd: asInt(json['lap_end']),
+        compound: asString(json['compound']),
+        tyreAgeAtStart: asInt(json['tyre_age_at_start']),
       );
 }
 
 class CarData {
   const CarData({
-    required this.brake,
+    this.brake,
     required this.date,
     required this.driverNumber,
-    required this.drs,
+    this.drs,
     required this.meetingKey,
-    required this.nGear,
-    required this.rpm,
+    this.nGear,
+    this.rpm,
     required this.sessionKey,
-    required this.speed,
-    required this.throttle,
+    this.speed,
+    this.throttle,
   });
 
-  final int brake;
+  final int? brake;
   final DateTime date;
   final int driverNumber;
-  final int drs;
+  final int? drs;
   final int meetingKey;
-  final int nGear;
-  final int rpm;
+  final int? nGear;
+  final int? rpm;
   final int sessionKey;
-  final int speed;
-  final int throttle;
+  final int? speed;
+  final int? throttle;
 
   factory CarData.fromJson(Map<String, dynamic> json) => CarData(
-        brake: json['brake'] as int,
-        date: DateTime.parse(json['date'] as String),
-        driverNumber: json['driver_number'] as int,
-        drs: json['drs'] as int,
-        meetingKey: json['meeting_key'] as int,
-        nGear: json['n_gear'] as int,
-        rpm: json['rpm'] as int,
-        sessionKey: json['session_key'] as int,
-        speed: json['speed'] as int,
-        throttle: json['throttle'] as int,
+        brake: asInt(json['brake']),
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        drs: asInt(json['drs']),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        nGear: asInt(json['n_gear']),
+        rpm: asInt(json['rpm']),
+        sessionKey: asInt(json['session_key']) ?? 0,
+        speed: asInt(json['speed']),
+        throttle: asInt(json['throttle']),
       );
 }
 
@@ -449,30 +465,61 @@ class ChampionshipDriver {
   const ChampionshipDriver({
     required this.driverNumber,
     required this.meetingKey,
-    required this.pointsCurrent,
-    required this.pointsStart,
-    required this.positionCurrent,
-    required this.positionStart,
+    this.pointsCurrent,
+    this.pointsStart,
+    this.positionCurrent,
+    this.positionStart,
     required this.sessionKey,
   });
 
   final int driverNumber;
   final int meetingKey;
-  final double pointsCurrent;
-  final double pointsStart;
-  final int positionCurrent;
-  final int positionStart;
+  final double? pointsCurrent;
+  final double? pointsStart;
+  final int? positionCurrent;
+  final int? positionStart;
   final int sessionKey;
 
   factory ChampionshipDriver.fromJson(Map<String, dynamic> json) =>
       ChampionshipDriver(
-        driverNumber: json['driver_number'] as int,
-        meetingKey: json['meeting_key'] as int,
-        pointsCurrent: (json['points_current'] as num).toDouble(),
-        pointsStart: (json['points_start'] as num).toDouble(),
-        positionCurrent: json['position_current'] as int,
-        positionStart: json['position_start'] as int,
-        sessionKey: json['session_key'] as int,
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        pointsCurrent: asDouble(json['points_current']),
+        pointsStart: asDouble(json['points_start']),
+        positionCurrent: asInt(json['position_current']),
+        positionStart: asInt(json['position_start']),
+        sessionKey: asInt(json['session_key']) ?? 0,
+      );
+}
+
+class ChampionshipTeam {
+  const ChampionshipTeam({
+    required this.teamName,
+    required this.meetingKey,
+    this.pointsCurrent,
+    this.pointsStart,
+    this.positionCurrent,
+    this.positionStart,
+    required this.sessionKey,
+  });
+
+  final String teamName;
+  final int meetingKey;
+  final double? pointsCurrent;
+  final double? pointsStart;
+  final int? positionCurrent;
+  final int? positionStart;
+  final int sessionKey;
+
+  factory ChampionshipTeam.fromJson(Map<String, dynamic> json) =>
+      ChampionshipTeam(
+        teamName: asString(json['team_name']) ?? '',
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        pointsCurrent: asDouble(json['points_current']),
+        pointsStart: asDouble(json['points_start']),
+        positionCurrent: asInt(json['position_current']),
+        positionStart: asInt(json['position_start']),
+        sessionKey: asInt(json['session_key']) ?? 0,
       );
 }
 
@@ -496,12 +543,130 @@ class LocationPoint {
   final double z;
 
   factory LocationPoint.fromJson(Map<String, dynamic> json) => LocationPoint(
-        date: DateTime.parse(json['date'] as String),
-        driverNumber: json['driver_number'] as int,
-        meetingKey: json['meeting_key'] as int,
-        sessionKey: json['session_key'] as int,
-        x: (json['x'] as num).toDouble(),
-        y: (json['y'] as num).toDouble(),
-        z: (json['z'] as num).toDouble(),
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        x: asDouble(json['x']) ?? 0,
+        y: asDouble(json['y']) ?? 0,
+        z: asDouble(json['z']) ?? 0,
+      );
+}
+
+class PitStop {
+  const PitStop({
+    required this.date,
+    required this.driverNumber,
+    required this.lapNumber,
+    this.pitDuration,
+    required this.meetingKey,
+    required this.sessionKey,
+  });
+
+  final DateTime date;
+  final int driverNumber;
+  final int lapNumber;
+  final double? pitDuration;
+  final int meetingKey;
+  final int sessionKey;
+
+  factory PitStop.fromJson(Map<String, dynamic> json) => PitStop(
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        lapNumber: asInt(json['lap_number']) ?? 0,
+        pitDuration: asDouble(json['pit_duration']),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+      );
+}
+
+class Overtake {
+  const Overtake({
+    required this.date,
+    required this.meetingKey,
+    required this.sessionKey,
+    required this.overtakingDriverNumber,
+    required this.overtakenDriverNumber,
+    this.position,
+  });
+
+  final DateTime date;
+  final int meetingKey;
+  final int sessionKey;
+  final int overtakingDriverNumber;
+  final int overtakenDriverNumber;
+  final int? position;
+
+  factory Overtake.fromJson(Map<String, dynamic> json) => Overtake(
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        sessionKey: asInt(json['session_key']) ?? 0,
+        overtakingDriverNumber: asInt(json['overtaking_driver_number']) ?? 0,
+        overtakenDriverNumber: asInt(json['overtaken_driver_number']) ?? 0,
+        position: asInt(json['position']),
+      );
+}
+
+class RaceControlEvent {
+  const RaceControlEvent({
+    required this.date,
+    this.driverNumber,
+    this.flag,
+    this.lapNumber,
+    required this.meetingKey,
+    this.message,
+    this.scope,
+    this.sector,
+    required this.sessionKey,
+    this.category,
+  });
+
+  final DateTime date;
+  final int? driverNumber;
+  final String? flag;
+  final int? lapNumber;
+  final int meetingKey;
+  final String? message;
+  final String? scope;
+  final int? sector;
+  final int sessionKey;
+  final String? category;
+
+  factory RaceControlEvent.fromJson(Map<String, dynamic> json) =>
+      RaceControlEvent(
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        driverNumber: asInt(json['driver_number']),
+        flag: asString(json['flag']),
+        lapNumber: asInt(json['lap_number']),
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        message: asString(json['message']),
+        scope: asString(json['scope']),
+        sector: asInt(json['sector']),
+        sessionKey: asInt(json['session_key']) ?? 0,
+        category: asString(json['category']),
+      );
+}
+
+class TeamRadio {
+  const TeamRadio({
+    required this.date,
+    required this.driverNumber,
+    required this.meetingKey,
+    this.recordingUrl,
+    required this.sessionKey,
+  });
+
+  final DateTime date;
+  final int driverNumber;
+  final int meetingKey;
+  final String? recordingUrl;
+  final int sessionKey;
+
+  factory TeamRadio.fromJson(Map<String, dynamic> json) => TeamRadio(
+        date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        driverNumber: asInt(json['driver_number']) ?? 0,
+        meetingKey: asInt(json['meeting_key']) ?? 0,
+        recordingUrl: asString(json['recording_url']),
+        sessionKey: asInt(json['session_key']) ?? 0,
       );
 }

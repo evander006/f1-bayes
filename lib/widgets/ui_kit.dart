@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/l10n/locale_scope.dart';
-import '../../core/theme/app_colors.dart';
-import '../../data/models/openf1_models.dart';
+import '../core/l10n/locale_scope.dart';
+import '../core/theme/app_colors.dart';
+import '../data/models/openf1_models.dart';
 
 class F1Card extends StatelessWidget {
   const F1Card({
@@ -23,7 +23,7 @@ class F1Card extends StatelessWidget {
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: color ?? AppColors.card,
+        color: color ?? Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
@@ -77,7 +77,7 @@ class DriverAvatar extends StatelessWidget {
           driver.headshotUrl == null ? null : NetworkImage(driver.headshotUrl!),
       onForegroundImageError: (_, _) {},
       child: Text(
-        driver.nameAcronym.substring(0, 1),
+        driver.nameAcronym.isEmpty ? '?' : driver.nameAcronym.substring(0, 1),
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w800,

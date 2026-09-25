@@ -1,0 +1,21 @@
+{
+  "@@locale": "en",
+  "appName": "F1 Analytics",
+  "dashboard": "Dashboard",
+  "calendar": "Calendar",
+  "live": "Live",
+  "drivers": "Drivers",
+  "teams": "Teams",
+  "championship": "Championship",
+  "predictions": "Predictions",
+  "settings": "Settings",
+  "retry": "Retry",
+  "noData": "No data available",
+  "errorGeneric": "Failed to load data",
+  "errorSubscription": "Real-time data requires an OpenF1 subscription",
+  "liveUnavailable": "Live data unavailable",
+  "darkMode": "Dark theme",
+  "throttle": "Throttle",
+  "brake": "Brake",
+  "telemetry": "Telemetry"
+}

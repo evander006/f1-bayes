@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/l10n/locale_scope.dart';
 import '../../core/theme/app_colors.dart';
-import '../../data/mock/mock_openf1.dart';
-import '../../domain/models/prediction_models.dart';
-import '../../widgets/track_map.dart';
+import '../../data/models/openf1_models.dart';
 import '../../widgets/ui_kit.dart';
+import '../bloc/app_context_cubit.dart';
+import '../race_details/race_details_screen.dart';
+import '../search/search_screen.dart';
+import '../widgets/async_states.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, this.compact = false});
@@ -16,93 +19,56 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = LocaleScope.stringsOf(context);
-    final data = MockOpenF1.snapshot;
-    return compact ? _Mobile(s: s, data: data) : _Desktop(s: s, data: data);
-  }
-}
-
-class _Desktop extends StatelessWidget {
-  const _Desktop({required this.s, required this.data});
-
-  final AppStrings s;
-  final MockSnapshot data;
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(28, 22, 28, 28),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              ScreenTitle(title: s.dashboard),
-              const SizedBox(height: 22),
-              SizedBox(
-                height: 148,
-                child: Row(
-                  children: [
-                    Expanded(child: SizedBox.expand(child: _NextRaceCard(s: s, data: data))),
-                    const SizedBox(width: 16),
-                    Expanded(child: SizedBox.expand(child: _WeatherCard(s: s, data: data))),
-                    const SizedBox(width: 16),
-                    Expanded(child: SizedBox.expand(child: _PoleCard(s: s, data: data))),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 430,
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 11,
-                      child: _TopPredictionsCard(s: s, data: data, compact: false),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      flex: 9,
-                      child: Column(
-                        children: [
-                          Expanded(child: _AccuracyCard(s: s, data: data)),
-                          const SizedBox(height: 16),
-                          Expanded(flex: 2, child: _LeaderCard(s: s, data: data)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ]),
+    return BlocBuilder<AppContextCubit, AppContextState>(
+      builder: (context, store) {
+        return AsyncBody(
+      status: store.status,
+      strings: s,
+      error: store.error,
+      onRetry: context.read<AppContextCubit>().load,
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 16, compact ? 16 : 28, 28),
+        children: [
+          ScreenTitle(
+            title: s.dashboard,
+            onSearch: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 18),
+          if (!compact)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _EventCard(s: s, store: store)),
+                const SizedBox(width: 16),
+                Expanded(child: _WeatherCard(s: s, store: store)),
+                const SizedBox(width: 16),
+                Expanded(child: _StandingsCard(s: s, store: store)),
+              ],
+            )
+          else ...[
+            _EventCard(s: s, store: store),
+            const SizedBox(height: 12),
+            _WeatherCard(s: s, store: store),
+          ],
+          const SizedBox(height: 16),
+          _PredictionsCard(s: s, store: store),
+          const SizedBox(height: 16),
+          _ResultsCard(s: s, store: store),
+        ],
+      ),
     );
-  }
-}
-
-class _Mobile extends StatelessWidget {
-  const _Mobile({required this.s, required this.data});
-
-  final AppStrings s;
-  final MockSnapshot data;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-      children: [
-        _NextRaceCard(s: s, data: data, weatherInline: true),
-        const SizedBox(height: 14),
-        _TopPredictionsCard(s: s, data: data, compact: true),
-      ],
+      },
     );
   }
 }
 
 class ScreenTitle extends StatelessWidget {
-  const ScreenTitle({super.key, required this.title});
+  const ScreenTitle({super.key, required this.title, this.onSearch});
 
   final String title;
+  final VoidCallback? onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -116,344 +82,220 @@ class ScreenTitle extends StatelessWidget {
         ),
         const Spacer(),
         const LocaleToggle(),
-        const SizedBox(width: 12),
-        Icon(Icons.search_rounded, color: AppColors.muted.withValues(alpha: 0.9)),
+        if (onSearch != null) ...[
+          const SizedBox(width: 12),
+          IconButton(onPressed: onSearch, icon: const Icon(Icons.search_rounded)),
+        ],
       ],
     );
   }
 }
 
-class _NextRaceCard extends StatelessWidget {
-  const _NextRaceCard({
-    required this.s,
-    required this.data,
-    this.weatherInline = false,
-  });
+class _EventCard extends StatelessWidget {
+  const _EventCard({required this.s, required this.store});
 
   final AppStrings s;
-  final MockSnapshot data;
-  final bool weatherInline;
+  final AppContextState store;
 
   @override
   Widget build(BuildContext context) {
-    final meeting = data.meeting;
-    return F1Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow(s.nextRace, color: AppColors.red),
-          const SizedBox(height: 10),
-          Text(
-            meeting.meetingName,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            formatMeetingWhen(data.raceSession.dateStart, isRu: s.isRu),
-            style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600),
-          ),
-          if (weatherInline) ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Icon(Icons.cloud_outlined, color: AppColors.muted),
-                const SizedBox(width: 8),
-                Text(
-                  '${data.weather.airTemperature.toStringAsFixed(0)}°C',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  '${s.humidity} ${data.weather.humidity.toStringAsFixed(0)}%',
-                  style: const TextStyle(color: AppColors.muted),
-                ),
-              ],
+    final meeting = store.nextMeeting ?? store.currentMeeting;
+    final session = store.latestSession;
+    if (meeting == null) return F1Card(child: Text(s.noData));
+    final start = session?.dateStart ?? meeting.dateStart;
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => RaceDetailsScreen(meeting: meeting)),
+      ),
+      child: F1Card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Eyebrow(s.nextRace, color: AppColors.red),
+            const SizedBox(height: 8),
+            Text(meeting.meetingName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+            const SizedBox(height: 6),
+            Text(
+              '${meeting.location} · ${session?.sessionName ?? meeting.circuitShortName}',
+              style: const TextStyle(color: AppColors.muted),
             ),
+            const SizedBox(height: 6),
+            Text(
+              formatMeetingWhen(start, isRu: s.isRu),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if (store.countdown != null)
+              Text(
+                _countdown(store.countdown!),
+                style: const TextStyle(color: AppColors.red, fontWeight: FontWeight.w800),
+              ),
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
 class _WeatherCard extends StatelessWidget {
-  const _WeatherCard({required this.s, required this.data});
+  const _WeatherCard({required this.s, required this.store});
 
   final AppStrings s;
-  final MockSnapshot data;
+  final AppContextState store;
 
   @override
   Widget build(BuildContext context) {
-    final w = data.weather;
+    final w = store.weather;
+    if (w == null) {
+      return F1Card(child: Text(s.noData));
+    }
     return F1Card(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F6FB),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              w.isWet ? Icons.umbrella_rounded : Icons.cloud_outlined,
-              color: const Color(0xFF7B8798),
-              size: 32,
-            ),
+          Eyebrow(s.weather),
+          const SizedBox(height: 10),
+          Text(
+            w.airTemperature == null ? '—' : '${w.airTemperature!.toStringAsFixed(0)}°C',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 32),
           ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Eyebrow(s.weather),
-              const SizedBox(height: 6),
-              Text(
-                '${w.airTemperature.toStringAsFixed(0)}°C',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              Text(
-                '${s.humidity} ${w.humidity.toStringAsFixed(0)}%',
-                style: const TextStyle(color: AppColors.muted),
-              ),
-            ],
-          ),
+          Text('${s.humidity} ${w.humidity?.toStringAsFixed(0) ?? '—'}%'),
+          Text('${s.trackTemp} ${w.trackTemperature?.toStringAsFixed(0) ?? '—'}°C'),
         ],
       ),
     );
   }
 }
 
-class _PoleCard extends StatelessWidget {
-  const _PoleCard({required this.s, required this.data});
+class _StandingsCard extends StatelessWidget {
+  const _StandingsCard({required this.s, required this.store});
 
   final AppStrings s;
-  final MockSnapshot data;
+  final AppContextState store;
 
   @override
   Widget build(BuildContext context) {
-    final pole = data.pole;
-    final driver = data.driverByNumber(pole.driverNumber);
+    final top = store.driverStandings.take(5).toList();
     return F1Card(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DriverAvatar(driver: driver, size: 54),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Eyebrow(s.currentPole),
-                const SizedBox(height: 6),
-                Text(
-                  '#${driver.driverNumber}  ${driver.shortName}',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                ),
-                Text(
-                  formatLap(pole.lapDuration),
-                  style: const TextStyle(
-                    color: AppColors.red,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 18,
-                  ),
-                ),
-              ],
+          Eyebrow(s.championship),
+          const SizedBox(height: 10),
+          if (top.isEmpty) Text(s.noData),
+          for (final row in top)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Text('${row.positionCurrent ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(store.driverByNumber(row.driverNumber)?.shortName ?? '#${row.driverNumber}')),
+                  Text(row.pointsCurrent?.toStringAsFixed(0) ?? '—'),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _TopPredictionsCard extends StatelessWidget {
-  const _TopPredictionsCard({
-    required this.s,
-    required this.data,
-    required this.compact,
-  });
+class _PredictionsCard extends StatelessWidget {
+  const _PredictionsCard({required this.s, required this.store});
 
   final AppStrings s;
-  final MockSnapshot data;
-  final bool compact;
+  final AppContextState store;
 
   @override
   Widget build(BuildContext context) {
-    final rows = data.predictions.take(5).toList();
+    final rows = store.predictions.take(5).toList();
     return F1Card(
-      padding: compact ? const EdgeInsets.all(16) : const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Eyebrow(s.top5),
-          const SizedBox(height: 16),
-          for (var i = 0; i < rows.length; i++) ...[
-            _PredictionTile(rank: i + 1, row: rows[i]),
-            if (i != rows.length - 1) const SizedBox(height: 12),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PredictionTile extends StatelessWidget {
-  const _PredictionTile({required this.rank, required this.row});
-
-  final int rank;
-  final DriverPrediction row;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Color(row.driver.teamColorValue);
-    return Row(
-      children: [
-        SizedBox(
-          width: 22,
-          child: Text(
-            '$rank',
-            style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.muted),
-          ),
-        ),
-        DriverAvatar(driver: row.driver, size: 34),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                row.driver.shortName,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 6),
-              ProbabilityBar(value: row.winProbability / 0.35, color: color),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          percent(row.winProbability),
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ],
-    );
-  }
-}
-
-class _AccuracyCard extends StatelessWidget {
-  const _AccuracyCard({required this.s, required this.data});
-
-  final AppStrings s;
-  final MockSnapshot data;
-
-  @override
-  Widget build(BuildContext context) {
-    final a = data.accuracy;
-    return F1Card(
-      child: Row(
-        children: [
-          SizedBox(
-            width: 88,
-            height: 88,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CircularProgressIndicator(
-                  value: a.hitRate,
-                  strokeWidth: 8,
-                  backgroundColor: const Color(0xFFEEF0F4),
-                  color: AppColors.red,
-                ),
-                Text(
-                  percent(a.hitRate),
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Eyebrow(s.modelAccuracy),
-                const SizedBox(height: 8),
-                Text('${s.brierScore}  ${a.brierScore.toStringAsFixed(3)}'),
-                Text(
-                  '${s.hitRate}  ${percent(a.top3Coverage)}',
-                  style: const TextStyle(color: AppColors.muted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LeaderCard extends StatelessWidget {
-  const _LeaderCard({required this.s, required this.data});
-
-  final AppStrings s;
-  final MockSnapshot data;
-
-  @override
-  Widget build(BuildContext context) {
-    final leader = data.leader;
-    return F1Card(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Eyebrow(s.currentLeader),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    DriverAvatar(driver: leader.driver, size: 48),
-                    const SizedBox(width: 10),
-                    Column(
+          const SizedBox(height: 12),
+          if (rows.isEmpty) Text(s.noData),
+          for (var i = 0; i < rows.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SizedBox(width: 20, child: Text('${i + 1}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.muted))),
+                  DriverAvatar(driver: rows[i].driver),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          leader.driver.shortName,
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                        ),
-                        Text(
-                          'P${leader.position.position}  ·  ${leader.driver.teamName}',
-                          style: const TextStyle(color: AppColors.muted),
-                        ),
+                        Text(rows[i].driver.shortName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ProbabilityBar(value: rows[i].winProbability / 0.4, color: Color(rows[i].driver.teamColorValue)),
                       ],
                     ),
-                  ],
-                ),
-                const Spacer(),
-                Text(
-                  '${data.meeting.circuitShortName}  ${data.circuitLengthKm} km  ·  ${data.totalLaps} ${s.lap.toLowerCase()}s',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
-                ),
-              ],
+                  ),
+                  const SizedBox(width: 8),
+                  Text(percent(rows[i].winProbability), style: const TextStyle(fontWeight: FontWeight.w800)),
+                ],
+              ),
             ),
-          ),
-          SizedBox(
-            width: 180,
-            child: TrackMap(
-              points: data.trackLocations,
-              drivers: data.drivers,
-              compact: true,
-            ),
-          ),
         ],
       ),
     );
   }
+}
+
+class _ResultsCard extends StatelessWidget {
+  const _ResultsCard({required this.s, required this.store});
+
+  final AppStrings s;
+  final AppContextState store;
+
+  @override
+  Widget build(BuildContext context) {
+    final results = store.latestResults.take(8).toList();
+    return F1Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Eyebrow('${s.results} · ${store.latestSession?.sessionName ?? ''}'),
+          const SizedBox(height: 12),
+          if (results.isEmpty) Text(s.noData),
+          for (final row in results)
+            _ResultLine(store: store, result: row),
+        ],
+      ),
+    );
+  }
+}
+
+class _ResultLine extends StatelessWidget {
+  const _ResultLine({required this.store, required this.result});
+
+  final AppContextState store;
+  final SessionResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final driver = store.driverByNumber(result.driverNumber);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          SizedBox(width: 28, child: Text('${result.position}', style: const TextStyle(fontWeight: FontWeight.w800))),
+          if (driver != null) DriverAvatar(driver: driver, size: 28),
+          const SizedBox(width: 8),
+          Expanded(child: Text(driver?.shortName ?? '#${result.driverNumber}')),
+          Text(result.gapToLeader ?? (result.position == 1 ? 'LEADER' : '—')),
+        ],
+      ),
+    );
+  }
+}
+
+String _countdown(Duration d) {
+  final days = d.inDays;
+  final hours = d.inHours % 24;
+  final mins = d.inMinutes % 60;
+  if (days > 0) return '${days}d ${hours}h';
+  return '${hours}h ${mins}m';
 }

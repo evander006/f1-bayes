@@ -1,0 +1,21 @@
+{
+  "@@locale": "ru",
+  "appName": "F1 Аналитика",
+  "dashboard": "Панель",
+  "calendar": "Календарь",
+  "live": "Эфир",
+  "drivers": "Пилоты",
+  "teams": "Команды",
+  "championship": "Чемпионат",
+  "predictions": "Прогноз",
+  "settings": "Настройки",
+  "retry": "Повторить",
+  "noData": "Нет данных",
+  "errorGeneric": "Не удалось загрузить данные",
+  "errorSubscription": "Live-данные OpenF1 требуют подписку",
+  "liveUnavailable": "Live-данные недоступны",
+  "darkMode": "Тёмная тема",
+  "throttle": "Газ",
+  "brake": "Тормоз",
+  "telemetry": "Телеметрия"
+}
