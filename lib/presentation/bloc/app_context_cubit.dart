@@ -131,6 +131,7 @@ class AppContextCubit extends Cubit<AppContextState> {
         return;
       }
       final latestSession = latest.first;
+
       var meetings = await repository.meetings(year: latestSession.year);
       if (meetings.isEmpty) {
         meetings = await repository.meetings(year: latestSession.year - 1);
@@ -141,6 +142,7 @@ class AppContextCubit extends Cubit<AppContextState> {
       for (final m in meetings) {
         if (m.meetingKey == latestSession.meetingKey) currentMeeting = m;
       }
+
       var currentSessions = await repository.sessions(meetingKey: latestSession.meetingKey);
       currentSessions = [...currentSessions]..sort((a, b) => a.dateStart.compareTo(b.dateStart));
 
@@ -154,15 +156,14 @@ class AppContextCubit extends Cubit<AppContextState> {
       }
 
       var drivers = await repository.drivers(sessionKey: latestSession.sessionKey);
-      if (drivers.isEmpty) {
-        drivers = await repository.drivers(sessionKey: 'latest');
-      }
+      if (drivers.isEmpty) drivers = await repository.drivers(sessionKey: 'latest');
 
       final weatherRows = await repository.weather(sessionKey: latestSession.sessionKey);
       final latestResults = await _safeResults(latestSession.sessionKey);
+
       Object gridKey = latestSession.sessionKey;
-      for (final s in currentSessions) {
-        if (s.isRace) gridKey = s.sessionKey;
+      for (final session in currentSessions) {
+        if (session.isRace && session.dateStart.isBefore(now)) gridKey = session.sessionKey;
       }
       final grid = await _safeGrid(gridKey);
 
@@ -190,7 +191,7 @@ class AppContextCubit extends Cubit<AppContextState> {
 
   Future<void> _loadChampionship(Session latest, List<Session> currentSessions) async {
     Object sessionKey = latest.sessionKey;
-    final races = currentSessions.where((s) => s.isRace).toList();
+    final races = currentSessions.where((s) => s.isRace && s.dateStart.isBefore(DateTime.now().toUtc())).toList();
     if (races.isNotEmpty) {
       sessionKey = races.last.sessionKey;
     } else {
@@ -219,7 +220,10 @@ class AppContextCubit extends Cubit<AppContextState> {
   Future<void> _loadHistoryAndPredictions() async {
     final year = state.latestSession?.year ?? DateTime.now().year;
     final completed = <Session>[];
-    for (var y = year; y >= 2023 && completed.length < 10; y--) {
+
+    // Use several seasons. Ten races are too small for stable conditional
+    // probabilities, especially for rain, pole and grid buckets.
+    for (var y = year; y >= 2020 && completed.length < 50; y--) {
       try {
         completed.addAll(await _completedRaces(y));
       } on OpenF1Exception {
@@ -227,63 +231,67 @@ class AppContextCubit extends Cubit<AppContextState> {
       }
     }
     completed.sort((a, b) => a.dateStart.compareTo(b.dateStart));
-    final sample = completed.length > 10 ? completed.sublist(completed.length - 10) : completed;
+    final sample = completed.length > 50
+        ? completed.sublist(completed.length - 50)
+        : completed;
 
     final evidence = <RaceEvidence>[];
     final accuracyRows = <RaceAccuracy>[];
 
+    // Walk chronologically. A race is evaluated only with information that
+    // existed before that race, preventing data leakage from future results.
     for (final race in sample) {
       try {
         final results = await repository.sessionResults(sessionKey: race.sessionKey);
         if (results.isEmpty) continue;
+
         final winner = results.first.driverNumber;
         final gridRows = await _safeGrid(race.sessionKey);
         final weatherRows = await repository.weather(sessionKey: race.sessionKey);
         final rain = weatherRows.any((w) => w.isWet);
-        StartingGrid? pole;
-        for (final g in gridRows) {
-          if (g.position == 1) {
-            pole = g;
-            break;
+        final gridMap = {for (final row in gridRows) row.driverNumber: row.position};
+
+        if (gridMap.isNotEmpty && evidence.isNotEmpty) {
+          final historicalDrivers = <Driver>[];
+          for (final driver in state.drivers) {
+            if (gridMap.containsKey(driver.driverNumber)) historicalDrivers.add(driver);
+          }
+
+          // Accuracy is optional and should never block the main dashboard.
+          // It is calculated only when the current driver metadata overlaps
+          // the historical grid.
+          if (historicalDrivers.isNotEmpty) {
+            final predicted = NaiveBayesPredictor().predict(
+              drivers: historicalDrivers,
+              history: List<RaceEvidence>.from(evidence),
+              currentGrid: gridMap,
+              rain: rain,
+            );
+            final winnerPrediction = predicted.where((p) => p.driver.driverNumber == winner);
+            if (winnerPrediction.isNotEmpty) {
+              final brier = predicted.fold<double>(0, (sum, p) {
+                final y = p.driver.driverNumber == winner ? 1.0 : 0.0;
+                return sum + math.pow(p.winProbability - y, 2).toDouble();
+              });
+              accuracyRows.add(RaceAccuracy(
+                meeting: _meetingFor(race.meetingKey),
+                predictedWinner: predicted.first.driver,
+                actualWinner: winnerPrediction.first.driver,
+                top3Predicted: predicted.take(3).map((p) => p.driver).toList(),
+                brierScore: brier,
+                hit: predicted.first.driver.driverNumber == winner,
+              ));
+            }
           }
         }
-        final poleNumber = pole?.driverNumber;
-        final gridMap = {for (final g in gridRows) g.driverNumber: g.position};
+
         evidence.add(RaceEvidence(
           winner: winner,
-          pole: poleNumber,
+          pole: gridMap.entries.where((e) => e.value == 1).map((e) => e.key).firstOrNull,
           rain: rain,
-          leaderDnf: results.any((r) => r.dnf && (r.position == 1 || r.driverNumber == poleNumber)),
+          leaderDnf: results.any((r) => r.dnf && r.position == 1),
           gridPositions: gridMap,
         ));
-
-        Meeting? meeting;
-        for (final m in state.meetings) {
-          if (m.meetingKey == race.meetingKey) meeting = m;
-        }
-        final winnerDriver = state.driverByNumber(winner);
-        if (meeting != null && winnerDriver != null && evidence.length > 1) {
-          final predicted = NaiveBayesPredictor().predict(
-            drivers: state.drivers,
-            history: evidence.sublist(0, evidence.length - 1),
-            currentGrid: gridMap,
-            rain: rain,
-          );
-          if (predicted.isNotEmpty) {
-            final brier = predicted.fold<double>(0, (sum, p) {
-              final y = p.driver.driverNumber == winner ? 1.0 : 0.0;
-              return sum + (p.winProbability - y) * (p.winProbability - y);
-            });
-            accuracyRows.add(RaceAccuracy(
-              meeting: meeting,
-              predictedWinner: predicted.first.driver,
-              actualWinner: winnerDriver,
-              top3Predicted: predicted.take(3).map((p) => p.driver).toList(),
-              brierScore: brier,
-              hit: predicted.first.driver.driverNumber == winner,
-            ));
-          }
-        }
       } on OpenF1Exception {
         continue;
       }
@@ -314,6 +322,13 @@ class AppContextCubit extends Cubit<AppContextState> {
         championshipPoints: state.championshipPoints,
       ),
     ));
+  }
+
+  Meeting? _meetingFor(int meetingKey) {
+    for (final meeting in state.meetings) {
+      if (meeting.meetingKey == meetingKey) return meeting;
+    }
+    return state.currentMeeting;
   }
 
   Future<List<SessionResult>> _safeResults(Object sessionKey) async {
