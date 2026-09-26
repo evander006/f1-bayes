@@ -1,10 +1,31 @@
 import '../datasources/openf1_api.dart';
+import '../datasources/openf1_mqtt.dart';
 import '../models/openf1_models.dart';
+import '../openf1_exception.dart';
 
 class OpenF1Repository {
-  OpenF1Repository({OpenF1Api? api}) : _api = api ?? OpenF1Api();
+  OpenF1Repository({OpenF1Api? api, OpenF1Mqtt? mqtt})
+      : _api = api ?? OpenF1Api(),
+        _mqtt = mqtt ?? OpenF1Mqtt();
 
   final OpenF1Api _api;
+  final OpenF1Mqtt _mqtt;
+
+  bool get isAuthenticated => _api.auth.configured;
+  bool get isLiveConnected => _mqtt.isConnected;
+  String? get liveTransport => _mqtt.transport;
+  Stream<OpenF1MqttMessage> get liveMessages => _mqtt.messages;
+  DateTime? get tokenExpiresAt => _api.auth.expiresAt;
+
+  Future<String> startLiveStream() async {
+    final token = await _api.auth.token();
+    if (token == null || token.isEmpty) {
+      throw OpenF1Exception.subscription();
+    }
+    return _mqtt.connect(username: _api.auth.username, token: token);
+  }
+
+  Future<void> stopLiveStream() => _mqtt.disconnect();
   final Map<String, _Cache> _cache = {};
 
   Future<List<Meeting>> meetings({int? year, Object? meetingKey}) {
@@ -15,6 +36,17 @@ class OpenF1Repository {
       });
       return rows.map(Meeting.fromJson).toList();
     });
+  }
+
+  Future<Session?> lastCompletedRace({int? year}) async {
+    final now = DateTime.now().toUtc();
+    for (var y = year ?? now.year; y >= 2023; y--) {
+      final races = await sessions(year: y, sessionName: 'Race');
+      races.sort((a, b) => a.dateStart.compareTo(b.dateStart));
+      final done = races.where((s) => !s.isCancelled && s.dateEnd.isBefore(now)).toList();
+      if (done.isNotEmpty) return done.last;
+    }
+    return null;
   }
 
   Future<List<Session>> sessions({
@@ -178,11 +210,13 @@ class OpenF1Repository {
     required Object sessionKey,
     int? driverNumber,
     String? dateGt,
+    String? dateLt,
   }) async {
     final rows = await _api.get('/location', query: {
       'session_key': sessionKey,
       'driver_number': driverNumber,
       'date>': dateGt,
+      'date<': dateLt,
     });
     return rows.map(LocationPoint.fromJson).toList();
   }

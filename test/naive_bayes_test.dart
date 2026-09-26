@@ -34,17 +34,17 @@ void main() {
     expect(rows.first.driver.driverNumber, 1);
   });
 
-  test('empty history still ranks pole ahead of the back of the grid', () {
+  test('championship points break ties when a driver has no starts', () {
     final drivers = [_d(1, 'One'), _d(4, 'Four'), _d(16, 'Six')];
     final rows = NaiveBayesPredictor().predict(
       drivers: drivers,
       history: const [],
       currentGrid: {1: 1, 4: 2, 16: 20},
       rain: false,
+      championshipPoints: {1: 100, 4: 40, 16: 4},
     );
     expect(rows.first.driver.driverNumber, 1);
     expect(rows.last.driver.driverNumber, 16);
     expect(rows.first.winProbability > rows.last.winProbability, true);
-    expect(rows.every((r) => (r.winProbability - rows.first.winProbability).abs() < 0.0001), false);
   });
 }

@@ -47,7 +47,7 @@ class _TeamDetailsView extends StatelessWidget {
     final s = LocaleScope.stringsOf(context);
     final app = context.watch<AppContextCubit>().state;
     final roster = app.drivers.where((d) => d.teamName == teamName).toList();
-    final standing = app.teamStandings.where((t) => t.teamName == teamName);
+    final standing = app.visibleTeams.where((t) => t.teamName == teamName);
     return Scaffold(
       appBar: AppBar(title: Text(teamName)),
       body: ListView(

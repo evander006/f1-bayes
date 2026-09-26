@@ -71,9 +71,10 @@ class _LocationPainter extends CustomPainter {
       canvas.drawPath(
         path,
         Paint()
-          ..color = (colors[entry.key] ?? AppColors.red).withValues(alpha: 0.25)
+          ..color = (colors[entry.key] ?? AppColors.red).withValues(alpha: 0.45)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2,
+          ..strokeWidth = 2.4
+          ..strokeCap = StrokeCap.round,
       );
     }
 

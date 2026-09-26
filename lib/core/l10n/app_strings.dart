@@ -48,6 +48,8 @@ class AppStrings {
   String get selectedDriver => isRu ? 'Выбранный пилот' : 'Selected Driver';
   String get qualifyingGrid => isRu ? 'Квалификация / Сетка' : 'Qualifying / Grid';
   String get trackMap => isRu ? 'Карта трассы' : 'Track Map';
+  String get trackDemo =>
+      isRu ? 'Демо: повтор последней гонки' : 'Demo: last race replay';
   String get speed => isRu ? 'Скорость' : 'Speed';
   String get throttle => isRu ? 'Газ' : 'Throttle';
   String get brake => isRu ? 'Тормоз' : 'Brake';
@@ -89,6 +91,11 @@ class AppStrings {
       ? 'Live-данные OpenF1 требуют подписку'
       : 'Real-time data requires an OpenF1 subscription';
   String get liveUnavailable => isRu ? 'Live-данные недоступны' : 'Live data unavailable';
+  String get liveAuthenticated =>
+      isRu ? 'Live API: авторизовано' : 'Live API: authenticated';
+  String get liveMqtt => isRu ? 'Эфир: MQTT' : 'Live: MQTT';
+  String get liveWebsocket => isRu ? 'Эфир: WebSocket' : 'Live: WebSocket';
+  String get liveRestFallback => isRu ? 'Эфир: REST polling' : 'Live: REST polling';
   String get usingLatestSession =>
       isRu ? 'Показана последняя доступная сессия' : 'Showing the latest available session';
   String get sessions => isRu ? 'Сессии' : 'Sessions';
@@ -119,6 +126,8 @@ class AppStrings {
 
   String featureLabel(String id) {
     switch (id) {
+      case 'prior':
+        return isRu ? 'Априори' : 'Prior';
       case 'pole':
         return pole;
       case 'grid':

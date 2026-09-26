@@ -70,12 +70,13 @@ class DriverAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Color(driver.teamColorValue);
+    final url = driver.headshotUrl?.trim();
+    final image = (url == null || url.isEmpty) ? null : NetworkImage(url);
     return CircleAvatar(
       radius: size / 2,
       backgroundColor: color.withValues(alpha: 0.18),
-      foregroundImage:
-          driver.headshotUrl == null ? null : NetworkImage(driver.headshotUrl!),
-      onForegroundImageError: (_, _) {},
+      foregroundImage: image,
+      onForegroundImageError: image == null ? null : (_, _) {},
       child: Text(
         driver.nameAcronym.isEmpty ? '?' : driver.nameAcronym.substring(0, 1),
         style: TextStyle(

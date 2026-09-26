@@ -1,10 +1,12 @@
 import 'package:dio/dio.dart';
 
 import '../openf1_exception.dart';
+import 'openf1_auth.dart';
 
 class OpenF1Api {
-  OpenF1Api({Dio? dio})
-      : _dio = dio ??
+  OpenF1Api({Dio? dio, OpenF1Auth? auth})
+      : auth = auth ?? OpenF1Auth(),
+        _dio = dio ??
             Dio(
               BaseOptions(
                 baseUrl: 'https://api.openf1.org/v1',
@@ -12,9 +14,12 @@ class OpenF1Api {
                 receiveTimeout: const Duration(seconds: 25),
                 responseType: ResponseType.json,
               ),
-            );
+            ) {
+    _dio.interceptors.add(_AuthInterceptor(this.auth, _dio));
+  }
 
   final Dio _dio;
+  final OpenF1Auth auth;
 
   Future<List<Map<String, dynamic>>> get(
     String path, {
@@ -40,6 +45,8 @@ class OpenF1Api {
     } on OpenF1Exception {
       rethrow;
     } on DioException catch (error) {
+      final wrapped = error.error;
+      if (wrapped is OpenF1Exception) throw wrapped;
       throw _mapDio(error);
     }
   }
@@ -61,5 +68,48 @@ class OpenF1Api {
       default:
         return OpenF1Exception.network();
     }
+  }
+}
+
+class _AuthInterceptor extends QueuedInterceptor {
+  _AuthInterceptor(this._auth, this._dio);
+
+  final OpenF1Auth _auth;
+  final Dio _dio;
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
+    try {
+      final token = await _auth.token();
+      if (token != null) {
+        options.headers['Authorization'] = 'Bearer $token';
+      }
+      options.headers['accept'] = 'application/json';
+      handler.next(options);
+    } catch (error, stack) {
+      handler.reject(
+        DioException(requestOptions: options, error: error, stackTrace: stack),
+      );
+    }
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    final already = err.requestOptions.extra['openf1_retried'] == true;
+    if (err.response?.statusCode == 401 && !already && _auth.configured) {
+      try {
+        final token = await _auth.token(force: true);
+        if (token != null) {
+          final request = err.requestOptions;
+          request.headers['Authorization'] = 'Bearer $token';
+          request.extra['openf1_retried'] = true;
+          handler.resolve(await _dio.fetch<dynamic>(request));
+          return;
+        }
+      } catch (_) {
+        // Fall through to the original 401.
+      }
+    }
+    handler.next(err);
   }
 }

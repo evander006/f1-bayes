@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/l10n/locale_scope.dart';
+import '../../data/repositories/openf1_repository.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/theme_cubit.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -41,6 +42,12 @@ class SettingsScreen extends StatelessWidget {
                 title: Text(s.darkMode),
                 value: context.watch<ThemeCubit>().state == ThemeMode.dark,
                 onChanged: (_) => context.read<ThemeCubit>().toggle(),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                context.read<OpenF1Repository>().isAuthenticated
+                    ? s.liveAuthenticated
+                    : s.errorSubscription,
               ),
             ],
           ),

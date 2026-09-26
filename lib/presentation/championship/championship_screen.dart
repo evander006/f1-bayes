@@ -71,8 +71,8 @@ class ChampionshipScreen extends StatelessWidget {
                   ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      if (store.teamStandings.isEmpty) F1Card(child: Text(s.noData)),
-                      for (final row in store.teamStandings)
+                      if (store.visibleTeams.isEmpty) F1Card(child: Text(s.noData)),
+                      for (final row in store.visibleTeams)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: F1Card(

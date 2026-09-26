@@ -20,6 +20,7 @@ class TeamsScreen extends StatelessWidget {
     return BlocBuilder<AppContextCubit, AppContextState>(
       builder: (context, store) {
         final colours = {for (final d in store.drivers) d.teamName: d.teamColorValue};
+        final teams = store.visibleTeams;
         return AsyncBody(
           status: store.status,
           strings: s,
@@ -30,7 +31,8 @@ class TeamsScreen extends StatelessWidget {
             children: [
               ScreenTitle(title: s.teams),
               const SizedBox(height: 16),
-              for (final standing in store.teamStandings)
+              if (teams.isEmpty) F1Card(child: Text(s.noData)),
+              for (final standing in teams)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: InkWell(
@@ -57,7 +59,12 @@ class TeamsScreen extends StatelessWidget {
                               ],
                             ),
                           ),
-                          Text('${standing.pointsCurrent?.toStringAsFixed(0) ?? '—'} ${s.points}'),
+                          Text(
+                            standing.pointsCurrent == null
+                                ? '— ${s.points}'
+                                : '${standing.pointsCurrent!.toStringAsFixed(0)} ${s.points}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
                         ],
                       ),
                     ),

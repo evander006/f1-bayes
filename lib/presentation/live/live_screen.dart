@@ -22,23 +22,30 @@ class LiveScreen extends StatelessWidget {
     return BlocProvider(
       create: (context) {
         final app = context.read<AppContextCubit>().state;
+        final session = app.liveSession ?? app.latestSession;
         return LiveTimingCubit(context.read<OpenF1Repository>())
           ..start(
-            session: app.latestSession,
+            session: session,
             drivers: app.drivers,
-            fallback: app.latestResults,
+            fallback: session?.sessionKey == app.latestSession?.sessionKey
+                ? app.latestResults
+                : const [],
           );
       },
       child: BlocListener<AppContextCubit, AppContextState>(
         listenWhen: (prev, next) =>
+            prev.liveSession?.sessionKey != next.liveSession?.sessionKey ||
             prev.latestSession?.sessionKey != next.latestSession?.sessionKey ||
             prev.status != next.status,
         listener: (context, app) {
           if (app.status != LoadStatus.success) return;
+          final session = app.liveSession ?? app.latestSession;
           context.read<LiveTimingCubit>().start(
-                session: app.latestSession,
+                session: session,
                 drivers: app.drivers,
-                fallback: app.latestResults,
+                fallback: session?.sessionKey == app.latestSession?.sessionKey
+                    ? app.latestResults
+                    : const [],
               );
         },
         child: _LiveView(compact: compact),
@@ -55,7 +62,8 @@ class _LiveView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = LocaleScope.stringsOf(context);
-    final session = context.read<AppContextCubit>().state.latestSession;
+    final app = context.read<AppContextCubit>().state;
+    final session = app.liveSession ?? app.latestSession;
     return BlocBuilder<LiveTimingCubit, LiveTimingState>(
       builder: (context, state) {
         return AsyncBody(
@@ -67,6 +75,17 @@ class _LiveView extends StatelessWidget {
             children: [
               ScreenTitle(title: s.liveTracker),
               const SizedBox(height: 12),
+              Text(
+                switch (state.transport) {
+                  'mqtt' => s.liveMqtt,
+                  'websocket' => s.liveWebsocket,
+                  'rest' => s.liveRestFallback,
+                  _ => context.read<OpenF1Repository>().isAuthenticated
+                      ? s.liveRestFallback
+                      : s.errorSubscription,
+                },
+                style: const TextStyle(color: AppColors.muted),
+              ),
               if (state.unavailable)
                 F1Card(
                   child: Text(
