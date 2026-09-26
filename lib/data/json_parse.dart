@@ -12,6 +12,25 @@ double? asDouble(dynamic value) {
   return double.tryParse(value.toString());
 }
 
+double? asGapSeconds(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString().trim().replaceAll('+', ''));
+}
+
+String? asGapLabel(dynamic value) {
+  if (value == null) return null;
+  if (value is num) {
+    if (value == 0) return 'LEADER';
+    return '+${value.toDouble().toStringAsFixed(3)}';
+  }
+  final text = value.toString().trim();
+  if (text.isEmpty) return null;
+  final parsed = double.tryParse(text.replaceAll('+', ''));
+  if (parsed != null) return parsed == 0 ? 'LEADER' : '+${parsed.toStringAsFixed(3)}';
+  return text;
+}
+
 String? asString(dynamic value) {
   if (value == null) return null;
   return value.toString();

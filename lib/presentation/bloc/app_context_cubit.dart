@@ -478,16 +478,46 @@ class AppContextCubit extends Cubit<AppContextState> {
 
   void _watchLiveSession() {
     _liveWatch?.cancel();
-    _liveWatch = Timer.periodic(const Duration(seconds: 20), (_) {
+    _liveWatch = Timer.periodic(const Duration(seconds: 15), (_) => unawaited(_refreshLiveSession()));
+  }
+
+  Future<void> _refreshLiveSession() async {
+    if (isClosed) return;
+    try {
+      final latestRows = await repository.sessions(sessionKey: 'latest');
+      final latest = latestRows.isNotEmpty ? latestRows.first : state.latestSession;
+      var sessions = state.currentSessions;
+      if (latest != null &&
+          (sessions.isEmpty || latest.meetingKey != sessions.first.meetingKey)) {
+        sessions = await repository.sessions(meetingKey: latest.meetingKey);
+        sessions = [...sessions]..sort((a, b) => a.dateStart.compareTo(b.dateStart));
+      }
+      final live = resolveLiveSession(
+        latest: latest,
+        sessions: sessions,
+        now: DateTime.now().toUtc(),
+      );
+      if (isClosed) return;
+      if (live?.sessionKey == state.liveSession?.sessionKey &&
+          latest?.sessionKey == state.latestSession?.sessionKey) {
+        return;
+      }
+      emit(state.copyWith(
+        latestSession: latest,
+        liveSession: live,
+        currentSessions: sessions,
+      ));
+    } on OpenF1Exception {
       if (isClosed) return;
       final next = resolveLiveSession(
         latest: state.latestSession,
         sessions: state.currentSessions,
         now: DateTime.now().toUtc(),
       );
-      if (next?.sessionKey == state.liveSession?.sessionKey) return;
-      emit(state.copyWith(liveSession: next));
-    });
+      if (next?.sessionKey != state.liveSession?.sessionKey) {
+        emit(state.copyWith(liveSession: next));
+      }
+    }
   }
 
   @override

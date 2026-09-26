@@ -38,6 +38,7 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
   Timer? _tokenTimer;
   StreamSubscription<OpenF1MqttMessage>? _liveSub;
   bool _inFlight = false;
+  int _seedGen = 0;
   Session? _session;
   List<Driver> _drivers = const [];
   List<SessionResult> _fallback = const [];
@@ -56,6 +57,8 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
     _session = session;
     _drivers = drivers;
     _fallback = fallback;
+    _seedGen++;
+    _inFlight = false;
     _pollTimer?.cancel();
     _tokenTimer?.cancel();
     unawaited(_liveSub?.cancel());
@@ -75,21 +78,23 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
   Future<void> refresh() => _seedFromRest();
 
   Future<void> _bootstrap() async {
+    _startPolling();
     await _seedFromRest();
     if (isClosed) return;
     try {
       await _repo.startLiveStream();
+      await _liveSub?.cancel();
       _liveSub = _repo.liveMessages.listen(_onLive);
       _scheduleTokenRefresh();
       _publish(immediate: true);
     } catch (_) {
-      _startPolling();
+      // REST polling already running
     }
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) => _seedFromRest());
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => _seedFromRest());
   }
 
   void _scheduleTokenRefresh() {
@@ -113,18 +118,31 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
 
   Future<void> _seedFromRest() async {
     final session = _session;
+    final gen = _seedGen;
     if (session == null || _inFlight || isClosed) return;
     _inFlight = true;
     if (state.status == LoadStatus.initial) {
       emit(const LiveTimingState(status: LoadStatus.loading));
     }
+    final since = DateTime.now().toUtc().subtract(const Duration(seconds: 25)).toIso8601String();
     try {
-      var positions = await _repo.positions(sessionKey: session.sessionKey);
-      for (final p in positions) {
-        _upsertPosition(p);
+      try {
+        for (final p in await _repo.positions(sessionKey: session.sessionKey, dateGt: since)) {
+          _upsertPosition(p);
+        }
+      } on OpenF1Exception {
+        if (_positions.isEmpty) {
+          try {
+            for (final p in await _repo.positions(sessionKey: session.sessionKey)) {
+              _upsertPosition(p);
+            }
+          } on OpenF1Exception {
+            // keep current board
+          }
+        }
       }
       try {
-        for (final row in await _repo.intervals(sessionKey: session.sessionKey)) {
+        for (final row in await _repo.intervals(sessionKey: session.sessionKey, dateGt: since)) {
           _upsertInterval(row);
         }
       } on OpenF1Exception {
@@ -153,9 +171,11 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
       } on OpenF1Exception {
         // live MQTT will fill the map
       }
+      if (gen != _seedGen || isClosed) return;
       _publish(immediate: true);
     } on OpenF1Exception catch (e) {
-      if (isClosed) return;
+      if (isClosed || gen != _seedGen) return;
+      if (state.rows.isNotEmpty) return;
       emit(LiveTimingState(
         status: LoadStatus.error,
         unavailable: true,
@@ -164,7 +184,7 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
         transport: _transportLabel(),
       ));
     } finally {
-      _inFlight = false;
+      if (gen == _seedGen) _inFlight = false;
     }
   }
 
@@ -195,7 +215,9 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
     if (session == null) return false;
     final key = payload['session_key'];
     if (key == null || key == 'latest') return true;
-    return key.toString() == session.sessionKey.toString();
+    if (key.toString() == session.sessionKey.toString()) return true;
+    final meeting = payload['meeting_key'];
+    return meeting != null && meeting.toString() == session.meetingKey.toString();
   }
 
   void _upsertPosition(Position row) {
@@ -240,14 +262,11 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
   void _emitState() {
     if (isClosed) return;
     final rows = _classification();
-    final waiting = _session != null &&
-        DateTime.now().toUtc().isBefore(_session!.dateStart);
     emit(LiveTimingState(
-      status: rows.isEmpty && !waiting ? LoadStatus.empty : LoadStatus.success,
+      status: LoadStatus.success,
       rows: rows,
       points: List<LocationPoint>.from(_points),
-      unavailable: rows.isEmpty,
-      unavailableReason: rows.isEmpty ? (waiting ? null : 'historical') : null,
+      unavailable: false,
       streaming: _repo.isLiveConnected,
       transport: _transportLabel(),
     ));

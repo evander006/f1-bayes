@@ -58,6 +58,8 @@ class AppStrings {
   String get drs => isRu ? 'DRS' : 'DRS';
   String get tyreAge => isRu ? 'возраст' : 'age';
   String get gap => isRu ? 'Отрыв' : 'Gap';
+  String get toLeader => isRu ? 'До лидера' : 'To leader';
+  String get toAhead => isRu ? 'До впереди' : 'Ahead';
   String get tyre => isRu ? 'Шины' : 'Tyre';
   String get lap => isRu ? 'Круг' : 'Lap';
   String get vsLast5 => isRu ? 'к последним 5' : 'vs. last 5 races';

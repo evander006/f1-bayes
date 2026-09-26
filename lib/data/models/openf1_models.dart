@@ -325,6 +325,8 @@ class Interval {
     required this.date,
     this.gapToLeader,
     this.interval,
+    this.gapToLeaderLabel,
+    this.intervalLabel,
   });
 
   final int meetingKey;
@@ -333,14 +335,18 @@ class Interval {
   final DateTime date;
   final double? gapToLeader;
   final double? interval;
+  final String? gapToLeaderLabel;
+  final String? intervalLabel;
 
   factory Interval.fromJson(Map<String, dynamic> json) => Interval(
         meetingKey: asInt(json['meeting_key']) ?? 0,
         sessionKey: asInt(json['session_key']) ?? 0,
         driverNumber: asInt(json['driver_number']) ?? 0,
         date: asDate(json['date']) ?? DateTime.fromMillisecondsSinceEpoch(0),
-        gapToLeader: asDouble(json['gap_to_leader']),
-        interval: asDouble(json['interval']),
+        gapToLeader: asGapSeconds(json['gap_to_leader']),
+        interval: asGapSeconds(json['interval']),
+        gapToLeaderLabel: asGapLabel(json['gap_to_leader']),
+        intervalLabel: asGapLabel(json['interval']),
       );
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/l10n/locale_scope.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/repositories/openf1_repository.dart';
+import '../../domain/models/prediction_models.dart';
 import '../../widgets/track_map.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/app_context_cubit.dart';
@@ -62,7 +63,7 @@ class _LiveView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = LocaleScope.stringsOf(context);
-    final app = context.read<AppContextCubit>().state;
+    final app = context.watch<AppContextCubit>().state;
     final session = app.liveSession ?? app.latestSession;
     return BlocBuilder<LiveTimingCubit, LiveTimingState>(
       builder: (context, state) {
@@ -105,6 +106,25 @@ class _LiveView extends StatelessWidget {
                     Eyebrow(s.classification),
                     const SizedBox(height: 10),
                     if (state.rows.isEmpty) Text(s.noData),
+                    if (state.rows.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 72),
+                            Expanded(child: Text(s.driver, style: const TextStyle(color: AppColors.muted, fontSize: 11))),
+                            SizedBox(
+                              width: 72,
+                              child: Text(s.toAhead, textAlign: TextAlign.right, style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                            ),
+                            SizedBox(
+                              width: 72,
+                              child: Text(s.toLeader, textAlign: TextAlign.right, style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                            ),
+                            const SizedBox(width: 30),
+                          ],
+                        ),
+                      ),
                     for (final row in state.rows)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -114,15 +134,28 @@ class _LiveView extends StatelessWidget {
                             DriverAvatar(driver: row.driver, size: 28),
                             const SizedBox(width: 8),
                             Expanded(child: Text(row.driver.shortName)),
-                            Text(
-                              row.interval?.gapToLeader == null
-                                  ? (row.position == 1 ? 'LEADER' : '—')
-                                  : formatGap(row.interval!.gapToLeader),
+                            SizedBox(
+                              width: 72,
+                              child: Text(
+                                _gapText(row, toLeader: false),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                              ),
                             ),
-                            if (row.stint?.compound != null) ...[
-                              const SizedBox(width: 8),
-                              TyreChip(row.stint!.compound!),
-                            ],
+                            SizedBox(
+                              width: 72,
+                              child: Text(
+                                _gapText(row, toLeader: true),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 30,
+                              child: row.stint?.compound == null
+                                  ? const SizedBox.shrink()
+                                  : Align(alignment: Alignment.centerRight, child: TyreChip(row.stint!.compound!)),
+                            ),
                           ],
                         ),
                       ),
@@ -144,4 +177,11 @@ class _LiveView extends StatelessWidget {
       },
     );
   }
+}
+
+String _gapText(LiveClassificationRow row, {required bool toLeader}) {
+  if (toLeader) {
+    return row.interval?.gapToLeaderLabel ?? (row.position == 1 ? 'LEADER' : '—');
+  }
+  return row.interval?.intervalLabel ?? (row.position == 1 ? 'LEADER' : '—');
 }

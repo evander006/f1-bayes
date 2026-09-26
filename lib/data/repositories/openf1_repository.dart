@@ -134,13 +134,19 @@ class OpenF1Repository {
     });
   }
 
-  Future<List<Position>> positions({required Object sessionKey}) async {
-    final rows = await _api.get('/position', query: {'session_key': sessionKey});
+  Future<List<Position>> positions({required Object sessionKey, String? dateGt}) async {
+    final rows = await _api.get('/position', query: {
+      'session_key': sessionKey,
+      'date>': dateGt,
+    });
     return rows.map(Position.fromJson).toList();
   }
 
-  Future<List<Interval>> intervals({required Object sessionKey}) async {
-    final rows = await _api.get('/intervals', query: {'session_key': sessionKey});
+  Future<List<Interval>> intervals({required Object sessionKey, String? dateGt}) async {
+    final rows = await _api.get('/intervals', query: {
+      'session_key': sessionKey,
+      'date>': dateGt,
+    });
     return rows.map(Interval.fromJson).toList();
   }
 
