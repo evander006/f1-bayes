@@ -7,6 +7,7 @@ import '../../data/openf1_exception.dart';
 import '../../data/repositories/openf1_repository.dart';
 import '../../domain/bayes/naive_bayes_predictor.dart';
 import '../../domain/models/prediction_models.dart';
+import '../../domain/weekend_status.dart';
 import 'load_status.dart';
 
 class AppContextState {
@@ -28,6 +29,12 @@ class AppContextState {
     this.predictions = const [],
     this.history = const [],
     this.accuracy,
+    this.latestGrid = const [],
+    this.upcomingSessions = const [],
+    this.forecastMeetingKey = 0,
+    this.forecastBasis = 'none',
+    this.forecastRain = false,
+    this.refreshedAt,
   });
 
   final LoadStatus status;
@@ -47,6 +54,12 @@ class AppContextState {
   final List<DriverPrediction> predictions;
   final List<RaceEvidence> history;
   final ModelAccuracy? accuracy;
+  final List<StartingGrid> latestGrid;
+  final List<Session> upcomingSessions;
+  final int forecastMeetingKey;
+  final String forecastBasis;
+  final bool forecastRain;
+  final DateTime? refreshedAt;
 
   Driver? driverByNumber(int n) {
     for (final d in drivers) {
@@ -126,11 +139,44 @@ class AppContextState {
   }
 
   Duration? get countdown {
-    final start = nextMeeting?.dateStart ?? latestSession?.dateStart;
+    final start = nextSession?.dateStart ?? _nextMeetingStart();
     if (start == null) return null;
     final diff = start.toUtc().difference(DateTime.now().toUtc());
     return diff.isNegative ? null : diff;
   }
+
+  DateTime? _nextMeetingStart() {
+    final meeting = nextMeeting;
+    if (meeting == null || !meeting.dateStart.toUtc().isAfter(DateTime.now().toUtc())) return null;
+    return meeting.dateStart;
+  }
+
+  Session? get nextSession {
+    final now = DateTime.now().toUtc();
+    final seen = <int>{};
+    final sessions = <Session>[];
+    for (final session in [...currentSessions, ...upcomingSessions]) {
+      if (session.isCancelled || !session.dateStart.toUtc().isAfter(now)) continue;
+      if (seen.add(session.sessionKey)) sessions.add(session);
+    }
+    if (sessions.isEmpty) return null;
+    sessions.sort((a, b) => a.dateStart.compareTo(b.dateStart));
+    return sessions.first;
+  }
+
+  Meeting? get forecastMeeting {
+    if (forecastMeetingKey == 0) return null;
+    for (final meeting in meetings) {
+      if (meeting.meetingKey == forecastMeetingKey) return meeting;
+    }
+    return null;
+  }
+
+  Meeting? get displayedMeeting => headerMeeting(
+        current: currentMeeting,
+        upcoming: nextMeeting,
+        now: DateTime.now().toUtc(),
+      );
 
   AppContextState copyWith({
     LoadStatus? status,
@@ -150,6 +196,12 @@ class AppContextState {
     List<DriverPrediction>? predictions,
     List<RaceEvidence>? history,
     ModelAccuracy? accuracy,
+    List<StartingGrid>? latestGrid,
+    List<Session>? upcomingSessions,
+    int? forecastMeetingKey,
+    String? forecastBasis,
+    bool? forecastRain,
+    DateTime? refreshedAt,
     bool clearError = false,
   }) {
     return AppContextState(
@@ -170,6 +222,12 @@ class AppContextState {
       predictions: predictions ?? this.predictions,
       history: history ?? this.history,
       accuracy: accuracy ?? this.accuracy,
+      latestGrid: latestGrid ?? this.latestGrid,
+      upcomingSessions: upcomingSessions ?? this.upcomingSessions,
+      forecastMeetingKey: forecastMeetingKey ?? this.forecastMeetingKey,
+      forecastBasis: forecastBasis ?? this.forecastBasis,
+      forecastRain: forecastRain ?? this.forecastRain,
+      refreshedAt: refreshedAt ?? this.refreshedAt,
     );
   }
 }
@@ -209,7 +267,11 @@ class AppContextCubit extends Cubit<AppContextState> {
   Timer? _liveWatch;
 
   Future<void> load() async {
-    emit(state.copyWith(status: LoadStatus.loading, clearError: true));
+    final keepVisible = state.status == LoadStatus.success;
+    emit(state.copyWith(
+      status: keepVisible ? LoadStatus.success : LoadStatus.loading,
+      clearError: true,
+    ));
     try {
       final latest = await repository.sessions(sessionKey: 'latest');
       if (latest.isEmpty) {
@@ -246,11 +308,31 @@ class AppContextCubit extends Cubit<AppContextState> {
 
       final weatherRows = await repository.weather(sessionKey: latestSession.sessionKey);
       final latestResults = await _safeResults(latestSession.sessionKey);
-      Object gridKey = latestSession.sessionKey;
-      for (final s in currentSessions) {
-        if (s.isRace) gridKey = s.sessionKey;
+      Object latestGridKey = latestSession.sessionKey;
+      for (final session in currentSessions) {
+        if (session.isRace) latestGridKey = session.sessionKey;
       }
-      final grid = await _safeGrid(gridKey);
+      final latestGrid = await _safeGrid(latestGridKey);
+      final forecastMeeting = forecastTargetMeeting(
+        current: currentMeeting,
+        upcoming: upcoming,
+        currentSessions: currentSessions,
+        now: now,
+      );
+      final forecastGrid = await _gridForForecast(
+        target: forecastMeeting,
+        latestSession: latestSession,
+        latestGrid: latestGrid,
+      );
+      var upcomingSessions = <Session>[];
+      if (upcoming != null && upcoming.meetingKey != latestSession.meetingKey) {
+        try {
+          upcomingSessions = await repository.sessions(meetingKey: upcoming.meetingKey);
+          upcomingSessions = [...upcomingSessions]..sort((a, b) => a.dateStart.compareTo(b.dateStart));
+        } on OpenF1Exception {
+          upcomingSessions = [];
+        }
+      }
       final liveSession = resolveLiveSession(
         latest: latestSession,
         sessions: currentSessions,
@@ -267,7 +349,10 @@ class AppContextCubit extends Cubit<AppContextState> {
         drivers: drivers,
         weather: weatherRows.isEmpty ? null : weatherRows.last,
         latestResults: latestResults,
-        grid: grid,
+        latestGrid: latestGrid,
+        grid: forecastGrid,
+        upcomingSessions: upcomingSessions,
+        forecastMeetingKey: forecastMeeting?.meetingKey ?? 0,
       ));
 
       await _loadChampionship(latestSession, currentSessions);
@@ -455,17 +540,51 @@ class AppContextCubit extends Cubit<AppContextState> {
       );
     }
 
+    final basis = _forecastBasis(state);
+    final rain = state.forecastMeetingKey != 0 &&
+        state.forecastMeetingKey == state.currentMeeting?.meetingKey &&
+        (state.weather?.isWet ?? false);
     emit(state.copyWith(
       history: evidence,
       accuracy: accuracy,
+      forecastBasis: basis,
+      forecastRain: rain,
+      refreshedAt: DateTime.now().toUtc(),
       predictions: NaiveBayesPredictor().predict(
         drivers: state.drivers,
         history: evidence,
         currentGrid: state.effectiveGrid,
-        rain: state.weather?.isWet ?? false,
+        rain: rain,
         championshipPoints: state.championshipPoints,
       ),
     ));
+  }
+
+  String _forecastBasis(AppContextState snapshot) {
+    if (snapshot.grid.isNotEmpty) return 'starting_grid';
+    if (snapshot.driverStandings.any((row) => row.positionCurrent != null)) return 'championship';
+    if (snapshot.latestResults.isNotEmpty) return 'latest_results';
+    return 'none';
+  }
+
+  Future<List<StartingGrid>> _gridForForecast({
+    required Meeting? target,
+    required Session latestSession,
+    required List<StartingGrid> latestGrid,
+  }) async {
+    if (target == null) return const [];
+    if (target.meetingKey == latestSession.meetingKey) return latestGrid;
+    try {
+      final sessions = await repository.sessions(meetingKey: target.meetingKey);
+      Session? race;
+      for (final session in sessions) {
+        if (session.isRace && !session.isCancelled) race = session;
+      }
+      if (race == null) return const [];
+      return await _safeGrid(race.sessionKey);
+    } on OpenF1Exception {
+      return const [];
+    }
   }
 
   Future<List<SessionResult>> _safeResults(Object sessionKey) async {

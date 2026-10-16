@@ -1,15 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/l10n/locale_scope.dart';
-import '../../core/theme/app_colors.dart';
 import '../../data/models/openf1_models.dart';
+import '../../data/repositories/openf1_repository.dart';
+import '../../domain/weekend_status.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/app_context_cubit.dart';
-import '../race_details/race_details_screen.dart';
+import '../bloc/dashboard_board_cubit.dart';
+import '../bloc/live_timing_cubit.dart';
+import '../bloc/load_status.dart';
 import '../search/search_screen.dart';
 import '../widgets/async_states.dart';
+import 'dash_theme.dart';
+import 'driver_focus.dart';
+import 'overview_cards.dart';
+import 'recent_results.dart';
+import 'standings_panel.dart';
+import 'timing_table.dart';
+import 'track_panel.dart';
+import 'weekend_header.dart';
+import 'win_probability_panel.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, this.compact = false});
@@ -18,48 +32,249 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = LocaleScope.stringsOf(context);
-    return BlocBuilder<AppContextCubit, AppContextState>(
-      builder: (context, store) {
-        return AsyncBody(
-      status: store.status,
-      strings: s,
-      error: store.error,
-      onRetry: context.read<AppContextCubit>().load,
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(compact ? 16 : 28, 16, compact ? 16 : 28, 28),
-        children: [
-          ScreenTitle(
-            title: s.dashboard,
+    return BlocProvider(
+      create: (context) => DashboardBoardCubit(context.read<OpenF1Repository>()),
+      child: _DashboardHost(compact: compact),
+    );
+  }
+}
+
+class _DashboardHost extends StatefulWidget {
+  const _DashboardHost({required this.compact});
+
+  final bool compact;
+
+  @override
+  State<_DashboardHost> createState() => _DashboardHostState();
+}
+
+class _DashboardHostState extends State<_DashboardHost> {
+  int? _selected;
+  bool _gridView = false;
+  bool _refreshing = false;
+  Timer? _phaseTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _phaseTimer = Timer.periodic(const Duration(seconds: 15), (_) => _syncBoard());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncBoard());
+  }
+
+  @override
+  void dispose() {
+    _phaseTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncBoard() {
+    if (!mounted) return;
+    final store = context.read<AppContextCubit>().state;
+    if (store.status == LoadStatus.success) {
+      context.read<DashboardBoardCubit>().load(store);
+    }
+    setState(() {});
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _refreshing = true);
+    await context.read<AppContextCubit>().load();
+    if (mounted) setState(() => _refreshing = false);
+  }
+
+  Session? _active(AppContextState store) {
+    final now = DateTime.now().toUtc();
+    return activeSession(store.currentSessions, now) ??
+        (store.latestSession != null && sessionIsActive(store.latestSession!, now) ? store.latestSession : null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = LocaleScope.stringsOf(context);
+    return BlocListener<AppContextCubit, AppContextState>(
+      listenWhen: (previous, next) =>
+          previous.status != next.status ||
+          previous.refreshedAt != next.refreshedAt ||
+          previous.latestSession?.sessionKey != next.latestSession?.sessionKey,
+      listener: (context, state) {
+        if (state.status == LoadStatus.success) {
+          context.read<DashboardBoardCubit>().load(state);
+        }
+      },
+      child: BlocBuilder<AppContextCubit, AppContextState>(
+        builder: (context, store) {
+          final active = _active(store);
+          final page = _DashboardBody(
+            compact: widget.compact,
+            store: store,
+            strings: strings,
+            refreshing: _refreshing,
+            gridView: _gridView,
+            selected: _selected,
+            liveAttached: active != null,
+            onRefresh: _refresh,
             onSearch: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const SearchScreen()),
             ),
+            onGrid: (value) => setState(() => _gridView = value),
+            onSelect: (number) => setState(() {
+              _selected = _selected == number ? null : number;
+            }),
+          );
+          return AsyncBody(
+            status: store.status,
+            strings: strings,
+            error: store.error,
+            onRetry: _refresh,
+            child: active == null
+                ? page
+                : BlocProvider(
+                    key: ValueKey(active.sessionKey),
+                    create: (context) => LiveTimingCubit(context.read<OpenF1Repository>())
+                      ..start(
+                        session: active,
+                        drivers: store.drivers,
+                        fallback: active.sessionKey == store.latestSession?.sessionKey ? store.latestResults : const [],
+                      ),
+                    child: page,
+                  ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DashboardBody extends StatelessWidget {
+  const _DashboardBody({
+    required this.compact,
+    required this.store,
+    required this.strings,
+    required this.refreshing,
+    required this.gridView,
+    required this.selected,
+    required this.liveAttached,
+    required this.onRefresh,
+    required this.onSearch,
+    required this.onGrid,
+    required this.onSelect,
+  });
+
+  final bool compact;
+  final AppContextState store;
+  final AppStrings strings;
+  final bool refreshing;
+  final bool gridView;
+  final int? selected;
+  final bool liveAttached;
+  final VoidCallback onRefresh;
+  final VoidCallback onSearch;
+  final ValueChanged<bool> onGrid;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!liveAttached) {
+      return BlocBuilder<DashboardBoardCubit, BoardState>(
+        builder: (context, board) => _frame(context, board, null),
+      );
+    }
+    return BlocBuilder<DashboardBoardCubit, BoardState>(
+      builder: (context, board) {
+        return BlocBuilder<LiveTimingCubit, LiveTimingState>(
+          builder: (context, live) => _frame(context, board, live),
+        );
+      },
+    );
+  }
+
+  Widget _frame(BuildContext context, BoardState board, LiveTimingState? live) {
+    final wide = !compact && MediaQuery.sizeOf(context).width >= 1100;
+    final main = Column(
+      children: [
+        TrackPanel(
+          store: store,
+          board: board,
+          strings: strings,
+          compact: !wide,
+          live: live,
+          selectedDriver: selected,
+          onSelect: onSelect,
+        ),
+        const SizedBox(height: 10),
+        LiveTimingTable(
+          store: store,
+          board: board,
+          strings: strings,
+          compact: !wide,
+          gridView: gridView,
+          onToggle: onGrid,
+          live: live,
+          selectedDriver: selected,
+          onSelect: onSelect,
+        ),
+      ],
+    );
+    final side = Column(
+      children: [
+        WinProbabilityPanel(
+          store: store,
+          strings: strings,
+          selectedDriver: selected,
+          onSelect: onSelect,
+        ),
+        const SizedBox(height: 10),
+        DriverFocus(store: store, board: board, strings: strings, selectedDriver: selected),
+        const SizedBox(height: 10),
+        ConditionsCard(store: store, board: board, strings: strings),
+      ],
+    );
+
+    return FadeIn(
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(wide ? 20 : 12, 12, wide ? 20 : 12, 24),
+        children: [
+          WeekendHeader(
+            store: store,
+            strings: strings,
+            refreshing: refreshing,
+            onRefresh: onRefresh,
+            onSearch: onSearch,
           ),
-          const SizedBox(height: 18),
-          if (!compact)
+          const SizedBox(height: 10),
+          RaceOverviewCards(store: store, strings: strings),
+          const SizedBox(height: 10),
+          if (wide)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _EventCard(s: s, store: store)),
-                const SizedBox(width: 16),
-                Expanded(child: _WeatherCard(s: s, store: store)),
-                const SizedBox(width: 16),
-                Expanded(child: _StandingsCard(s: s, store: store)),
+                Expanded(flex: 8, child: main),
+                const SizedBox(width: 10),
+                Expanded(flex: 4, child: side),
               ],
             )
           else ...[
-            _EventCard(s: s, store: store),
-            const SizedBox(height: 12),
-            _WeatherCard(s: s, store: store),
+            main,
+            const SizedBox(height: 10),
+            side,
           ],
-          const SizedBox(height: 16),
-          _PredictionsCard(s: s, store: store),
-          const SizedBox(height: 16),
-          _ResultsCard(s: s, store: store),
+          const SizedBox(height: 10),
+          if (wide)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: RecentRaceResults(store: store, board: board, strings: strings)),
+                const SizedBox(width: 10),
+                Expanded(child: ChampionshipStandings(store: store, strings: strings)),
+              ],
+            )
+          else ...[
+            RecentRaceResults(store: store, board: board, strings: strings),
+            const SizedBox(height: 10),
+            ChampionshipStandings(store: store, strings: strings),
+          ],
         ],
       ),
-    );
-      },
     );
   }
 }
@@ -89,213 +304,4 @@ class ScreenTitle extends StatelessWidget {
       ],
     );
   }
-}
-
-class _EventCard extends StatelessWidget {
-  const _EventCard({required this.s, required this.store});
-
-  final AppStrings s;
-  final AppContextState store;
-
-  @override
-  Widget build(BuildContext context) {
-    final meeting = store.nextMeeting ?? store.currentMeeting;
-    final session = store.latestSession;
-    if (meeting == null) return F1Card(child: Text(s.noData));
-    final start = session?.dateStart ?? meeting.dateStart;
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => RaceDetailsScreen(meeting: meeting)),
-      ),
-      child: F1Card(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Eyebrow(s.nextRace, color: AppColors.red),
-            const SizedBox(height: 8),
-            Text(meeting.meetingName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
-            const SizedBox(height: 6),
-            Text(
-              '${meeting.location} · ${session?.sessionName ?? meeting.circuitShortName}',
-              style: const TextStyle(color: AppColors.muted),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              formatMeetingWhen(start, isRu: s.isRu),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            if (store.countdown != null)
-              Text(
-                _countdown(store.countdown!),
-                style: const TextStyle(color: AppColors.red, fontWeight: FontWeight.w800),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _WeatherCard extends StatelessWidget {
-  const _WeatherCard({required this.s, required this.store});
-
-  final AppStrings s;
-  final AppContextState store;
-
-  @override
-  Widget build(BuildContext context) {
-    final w = store.weather;
-    if (w == null) {
-      return F1Card(child: Text(s.noData));
-    }
-    return F1Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow(s.weather),
-          const SizedBox(height: 10),
-          Text(
-            w.airTemperature == null ? '—' : '${w.airTemperature!.toStringAsFixed(0)}°C',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 32),
-          ),
-          Text('${s.humidity} ${w.humidity?.toStringAsFixed(0) ?? '—'}%'),
-          Text('${s.trackTemp} ${w.trackTemperature?.toStringAsFixed(0) ?? '—'}°C'),
-        ],
-      ),
-    );
-  }
-}
-
-class _StandingsCard extends StatelessWidget {
-  const _StandingsCard({required this.s, required this.store});
-
-  final AppStrings s;
-  final AppContextState store;
-
-  @override
-  Widget build(BuildContext context) {
-    final top = store.driverStandings.take(5).toList();
-    return F1Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow(s.championship),
-          const SizedBox(height: 10),
-          if (top.isEmpty) Text(s.noData),
-          for (final row in top)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Text('${row.positionCurrent ?? '—'}', style: const TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(store.driverByNumber(row.driverNumber)?.shortName ?? '#${row.driverNumber}')),
-                  Text(row.pointsCurrent?.toStringAsFixed(0) ?? '—'),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PredictionsCard extends StatelessWidget {
-  const _PredictionsCard({required this.s, required this.store});
-
-  final AppStrings s;
-  final AppContextState store;
-
-  @override
-  Widget build(BuildContext context) {
-    final rows = store.predictions.take(5).toList();
-    return F1Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow(s.top5),
-          const SizedBox(height: 12),
-          if (rows.isEmpty) Text(s.noData),
-          for (var i = 0; i < rows.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  SizedBox(width: 20, child: Text('${i + 1}', style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.muted))),
-                  DriverAvatar(driver: rows[i].driver),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(rows[i].driver.shortName, style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ProbabilityBar(value: rows[i].winProbability / 0.4, color: Color(rows[i].driver.teamColorValue)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(percent(rows[i].winProbability), style: const TextStyle(fontWeight: FontWeight.w800)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultsCard extends StatelessWidget {
-  const _ResultsCard({required this.s, required this.store});
-
-  final AppStrings s;
-  final AppContextState store;
-
-  @override
-  Widget build(BuildContext context) {
-    final results = store.latestResults.take(8).toList();
-    return F1Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow('${s.results} · ${store.latestSession?.sessionName ?? ''}'),
-          const SizedBox(height: 12),
-          if (results.isEmpty) Text(s.noData),
-          for (final row in results)
-            _ResultLine(store: store, result: row),
-        ],
-      ),
-    );
-  }
-}
-
-class _ResultLine extends StatelessWidget {
-  const _ResultLine({required this.store, required this.result});
-
-  final AppContextState store;
-  final SessionResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final driver = store.driverByNumber(result.driverNumber);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(width: 28, child: Text('${result.position}', style: const TextStyle(fontWeight: FontWeight.w800))),
-          if (driver != null) DriverAvatar(driver: driver, size: 28),
-          const SizedBox(width: 8),
-          Expanded(child: Text(driver?.shortName ?? '#${result.driverNumber}')),
-          Text(result.gapToLeader ?? (result.position == 1 ? 'LEADER' : '—')),
-        ],
-      ),
-    );
-  }
-}
-
-String _countdown(Duration d) {
-  final days = d.inDays;
-  final hours = d.inHours % 24;
-  final mins = d.inMinutes % 60;
-  if (days > 0) return '${days}d ${hours}h';
-  return '${hours}h ${mins}m';
 }

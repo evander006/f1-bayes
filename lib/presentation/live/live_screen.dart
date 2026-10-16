@@ -5,6 +5,7 @@ import '../../core/l10n/locale_scope.dart';
 import '../../core/theme/app_colors.dart';
 import '../../data/repositories/openf1_repository.dart';
 import '../../domain/models/prediction_models.dart';
+import '../../domain/weekend_status.dart';
 import '../../widgets/track_map.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/app_context_cubit.dart';
@@ -93,11 +94,14 @@ class _LiveView extends StatelessWidget {
                     state.unavailableReason == 'subscription' ? s.errorSubscription : s.liveUnavailable,
                   ),
                 ),
-              if (session != null)
+              if (session != null) ...[
                 Text(
                   '${session.sessionName} · ${session.location}',
                   style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w600),
                 ),
+                if (!sessionIsActive(session, DateTime.now().toUtc()))
+                  Text(s.usingLatestSession, style: const TextStyle(color: AppColors.muted)),
+              ],
               const SizedBox(height: 12),
               F1Card(
                 child: Column(

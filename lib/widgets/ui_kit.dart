@@ -24,14 +24,10 @@ class F1Card extends StatelessWidget {
       padding: padding ?? const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: color ?? Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).brightness == Brightness.dark ? AppColors.lineDark : AppColors.line,
+        ),
       ),
       child: child,
     );
@@ -122,15 +118,20 @@ class ProbabilityBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final track = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.lineDark
+        : const Color(0xFFEEF0F4);
+    final width = value.isNaN ? 0.0 : value.clamp(0.0, 1.0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(99),
       child: SizedBox(
         height: height,
         child: Stack(
           children: [
-            Container(color: const Color(0xFFEEF0F4)),
+            Container(color: track),
             FractionallySizedBox(
-              widthFactor: value.clamp(0.02, 1),
+              alignment: Alignment.centerLeft,
+              widthFactor: width,
               child: Container(color: color),
             ),
           ],
@@ -147,14 +148,21 @@ class TyreChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isSoft = compound == 'SOFT';
-    final isMed = compound == 'MEDIUM';
+    final upper = compound.toUpperCase();
+    final isSoft = upper == 'SOFT';
+    final isMed = upper == 'MEDIUM';
+    final isInter = upper == 'INTERMEDIATE';
+    final isWet = upper == 'WET';
     final color = isSoft
         ? AppColors.soft
         : isMed
             ? AppColors.medium
-            : AppColors.hard;
-    final letter = compound[0];
+            : isInter
+                ? AppColors.inter
+                : isWet
+                    ? AppColors.wet
+                    : AppColors.hard;
+    final letter = upper.isEmpty ? '?' : upper[0];
     return Container(
       width: 22,
       height: 22,
@@ -230,6 +238,33 @@ String formatGap(double? gap) {
 String formatMeetingWhen(DateTime start, {required bool isRu}) {
   final locale = isRu ? 'ru' : 'en';
   return DateFormat('d MMM yyyy, HH:mm', locale).format(start.toLocal());
+}
+
+String formatMeetingRange(DateTime start, DateTime end, {required bool isRu}) {
+  final locale = isRu ? 'ru' : 'en';
+  final sameDay = start.toLocal().year == end.toLocal().year &&
+      start.toLocal().month == end.toLocal().month &&
+      start.toLocal().day == end.toLocal().day;
+  if (sameDay) return DateFormat('d MMM yyyy', locale).format(start.toLocal());
+  final left = DateFormat('d MMM', locale).format(start.toLocal());
+  final right = DateFormat('d MMM yyyy', locale).format(end.toLocal());
+  return '$left – $right';
+}
+
+String formatClock(DateTime time, {required bool isRu}) {
+  final locale = isRu ? 'ru' : 'en';
+  return DateFormat('d MMM, HH:mm', locale).format(time.toLocal());
+}
+
+String formatCountdown(Duration d, {required bool isRu}) {
+  if (d.isNegative) return isRu ? 'сейчас' : 'now';
+  final days = d.inDays;
+  final hours = d.inHours % 24;
+  final mins = d.inMinutes % 60;
+  final secs = d.inSeconds % 60;
+  if (days > 0) return isRu ? '$days д $hours ч' : '${days}d ${hours}h';
+  if (hours > 0) return isRu ? '$hours ч $mins мин' : '${hours}h ${mins}m';
+  return isRu ? '$mins мин $secs с' : '${mins}m ${secs}s';
 }
 
 String percent(double value) => '${(value * 100).toStringAsFixed(1)}%';

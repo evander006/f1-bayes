@@ -41,9 +41,9 @@ class AppTheme {
   }
 
   static ThemeData dark() {
-    const canvas = Color(0xFF0B0E14);
-    const card = Color(0xFF151A22);
-    const text = Color(0xFFF3F5F8);
+    const canvas = AppColors.ink;
+    const card = AppColors.panel;
+    const text = AppColors.textDark;
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -71,8 +71,12 @@ class AppTheme {
         color: card,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.lineDark),
+        ),
       ),
+      dividerColor: AppColors.lineDark,
     );
   }
 }
