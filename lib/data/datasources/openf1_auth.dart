@@ -3,6 +3,10 @@ import 'package:dio/dio.dart';
 import 'openf1_secrets.dart';
 import '../openf1_exception.dart';
 
+/// Token client for `api.openf1.org`.
+///
+/// [username] and [password] default to [OpenF1Secrets], which are empty unless
+/// the build was started with `--dart-define-from-file=.env`.
 class OpenF1Auth {
   OpenF1Auth({
     String? username,
