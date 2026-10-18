@@ -34,16 +34,17 @@ class AppTheme {
         color: AppColors.card,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerColor: AppColors.line,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: AppColors.card,
+        indicatorColor: AppColors.red.withValues(alpha: 0.12),
+      ),
     );
   }
 
   static ThemeData dark() {
-    const canvas = Color(0xFF0B0E14);
-    const card = Color(0xFF151A22);
-    const text = Color(0xFFF3F5F8);
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -51,27 +52,32 @@ class AppTheme {
         seedColor: AppColors.red,
         brightness: Brightness.dark,
         primary: AppColors.red,
-        surface: canvas,
+        surface: AppColors.canvasDark,
       ),
     );
     final theme = GoogleFonts.manropeTextTheme(base.textTheme).apply(
-      bodyColor: text,
-      displayColor: text,
+      bodyColor: AppColors.textDark,
+      displayColor: AppColors.textDark,
     );
     return base.copyWith(
       textTheme: theme,
-      scaffoldBackgroundColor: canvas,
+      scaffoldBackgroundColor: AppColors.canvasDark,
       appBarTheme: AppBarTheme(
-        backgroundColor: card,
-        foregroundColor: text,
+        backgroundColor: AppColors.cardDark,
+        foregroundColor: AppColors.textDark,
         elevation: 0,
         titleTextStyle: theme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
       ),
       cardTheme: CardThemeData(
-        color: card,
+        color: AppColors.cardDark,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      dividerColor: AppColors.lineDark,
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: AppColors.cardDark,
+        indicatorColor: AppColors.red.withValues(alpha: 0.18),
       ),
     );
   }

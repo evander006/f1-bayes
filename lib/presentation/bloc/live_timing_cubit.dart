@@ -18,6 +18,7 @@ class LiveTimingState {
     this.points = const [],
     this.streaming = false,
     this.transport,
+    this.updatedAt,
   });
 
   final LoadStatus status;
@@ -27,6 +28,7 @@ class LiveTimingState {
   final List<LocationPoint> points;
   final bool streaming;
   final String? transport;
+  final DateTime? updatedAt;
 }
 
 class LiveTimingCubit extends Cubit<LiveTimingState> {
@@ -269,6 +271,7 @@ class LiveTimingCubit extends Cubit<LiveTimingState> {
       unavailable: false,
       streaming: _repo.isLiveConnected,
       transport: _transportLabel(),
+      updatedAt: DateTime.now().toUtc(),
     ));
   }
 

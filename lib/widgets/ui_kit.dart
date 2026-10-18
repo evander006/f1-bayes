@@ -19,19 +19,16 @@ class F1Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       width: double.infinity,
-      padding: padding ?? const EdgeInsets.all(18),
+      padding: padding ?? const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color ?? Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 18,
-            offset: Offset(0, 8),
-          ),
-        ],
+        color: color ??
+            Theme.of(context).cardTheme.color ??
+            Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dark ? AppColors.lineDark : AppColors.line),
       ),
       child: child,
     );
@@ -128,7 +125,11 @@ class ProbabilityBar extends StatelessWidget {
         height: height,
         child: Stack(
           children: [
-            Container(color: const Color(0xFFEEF0F4)),
+            Container(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.lineDark
+                  : const Color(0xFFEEF0F4),
+            ),
             FractionallySizedBox(
               widthFactor: value.clamp(0.02, 1),
               child: Container(color: color),

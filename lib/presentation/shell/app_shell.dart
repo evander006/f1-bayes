@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/l10n/locale_scope.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/repositories/openf1_repository.dart';
 import '../../widgets/adaptive_logo.dart';
 import '../../widgets/ui_kit.dart';
 import '../accuracy/accuracy_screen.dart';
+import '../bloc/live_timing_cubit.dart';
 import '../calendar/calendar_screen.dart';
 import '../championship/championship_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../drivers/drivers_screen.dart';
 import '../live/live_screen.dart';
+import '../live/live_timing_binder.dart';
 import '../more/more_screen.dart';
 import '../predictions/predictions_screen.dart';
 import '../settings/settings_screen.dart';
@@ -51,52 +55,57 @@ class _AppShellState extends State<AppShell> {
       const MoreScreen(),
     ];
 
-    if (!wide) {
-      return Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        appBar: AppBar(
-          title: Row(
-            children: [
-              const AdaptiveLogo(),
-              const SizedBox(width: 10),
-              Text(s.appName, style: const TextStyle(fontWeight: FontWeight.w800)),
-            ],
-          ),
-          actions: const [
-            Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: LocaleToggle(),
+    final body = LiveTimingBinder(
+      child: wide
+          ? Scaffold(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              body: Row(
+                children: [
+                  _DesktopRail(
+                    selected: index,
+                    s: s,
+                    onSelect: (i) => setState(() => index = i),
+                  ),
+                  Expanded(child: desktopPages[index]),
+                ],
+              ),
+            )
+          : Scaffold(
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+              appBar: AppBar(
+                title: Row(
+                  children: [
+                    const AdaptiveLogo(),
+                    const SizedBox(width: 10),
+                    Text(s.appName, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  ],
+                ),
+                actions: const [
+                  Padding(
+                    padding: EdgeInsets.only(right: 16),
+                    child: LocaleToggle(),
+                  ),
+                ],
+              ),
+              body: IndexedStack(index: index, children: mobilePages),
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: index,
+                onDestinationSelected: (i) => setState(() => index = i),
+                indicatorColor: AppColors.red.withValues(alpha: 0.12),
+                destinations: [
+                  NavigationDestination(icon: const Icon(Icons.space_dashboard_outlined), selectedIcon: const Icon(Icons.space_dashboard_rounded, color: AppColors.red), label: s.dashboard),
+                  NavigationDestination(icon: const Icon(Icons.flag_outlined), selectedIcon: const Icon(Icons.flag_rounded, color: AppColors.red), label: s.races),
+                  NavigationDestination(icon: const Icon(Icons.timeline_outlined), selectedIcon: const Icon(Icons.timeline_rounded, color: AppColors.red), label: s.live),
+                  NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people, color: AppColors.red), label: s.drivers),
+                  NavigationDestination(icon: const Icon(Icons.more_horiz), selectedIcon: const Icon(Icons.more_horiz, color: AppColors.red), label: s.more),
+                ],
+              ),
             ),
-          ],
-        ),
-        body: IndexedStack(index: index, children: mobilePages),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (i) => setState(() => index = i),
-          indicatorColor: AppColors.red.withValues(alpha: 0.12),
-          destinations: [
-            NavigationDestination(icon: const Icon(Icons.space_dashboard_outlined), selectedIcon: const Icon(Icons.space_dashboard_rounded, color: AppColors.red), label: s.dashboard),
-            NavigationDestination(icon: const Icon(Icons.flag_outlined), selectedIcon: const Icon(Icons.flag_rounded, color: AppColors.red), label: s.races),
-            NavigationDestination(icon: const Icon(Icons.timeline_outlined), selectedIcon: const Icon(Icons.timeline_rounded, color: AppColors.red), label: s.live),
-            NavigationDestination(icon: const Icon(Icons.people_outline), selectedIcon: const Icon(Icons.people, color: AppColors.red), label: s.drivers),
-            NavigationDestination(icon: const Icon(Icons.more_horiz), selectedIcon: const Icon(Icons.more_horiz, color: AppColors.red), label: s.more),
-          ],
-        ),
-      );
-    }
+    );
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Row(
-        children: [
-          _DesktopRail(
-            selected: index,
-            s: s,
-            onSelect: (i) => setState(() => index = i),
-          ),
-          Expanded(child: desktopPages[index]),
-        ],
-      ),
+    return BlocProvider(
+      create: (context) => LiveTimingCubit(context.read<OpenF1Repository>()),
+      child: body,
     );
   }
 }

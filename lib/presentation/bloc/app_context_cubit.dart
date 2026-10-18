@@ -28,6 +28,8 @@ class AppContextState {
     this.predictions = const [],
     this.history = const [],
     this.accuracy,
+    this.trackOutline = const [],
+    this.trackOutlineSession,
   });
 
   final LoadStatus status;
@@ -47,6 +49,8 @@ class AppContextState {
   final List<DriverPrediction> predictions;
   final List<RaceEvidence> history;
   final ModelAccuracy? accuracy;
+  final List<LocationPoint> trackOutline;
+  final Session? trackOutlineSession;
 
   Driver? driverByNumber(int n) {
     for (final d in drivers) {
@@ -126,11 +130,24 @@ class AppContextState {
   }
 
   Duration? get countdown {
-    final start = nextMeeting?.dateStart ?? latestSession?.dateStart;
+    final start = nextUpcomingSession?.dateStart ??
+        nextMeeting?.dateStart ??
+        latestSession?.dateStart;
     if (start == null) return null;
     final diff = start.toUtc().difference(DateTime.now().toUtc());
     return diff.isNegative ? null : diff;
   }
+
+  Session? get nextUpcomingSession {
+    final now = DateTime.now().toUtc();
+    for (final session in currentSessions) {
+      if (!session.isCancelled && session.dateStart.isAfter(now)) return session;
+    }
+    return null;
+  }
+
+  Meeting? get featuredMeeting => nextMeeting ?? currentMeeting;
+  Session? get featuredSession => liveSession ?? latestSession;
 
   AppContextState copyWith({
     LoadStatus? status,
@@ -150,6 +167,8 @@ class AppContextState {
     List<DriverPrediction>? predictions,
     List<RaceEvidence>? history,
     ModelAccuracy? accuracy,
+    List<LocationPoint>? trackOutline,
+    Session? trackOutlineSession,
     bool clearError = false,
   }) {
     return AppContextState(
@@ -170,6 +189,8 @@ class AppContextState {
       predictions: predictions ?? this.predictions,
       history: history ?? this.history,
       accuracy: accuracy ?? this.accuracy,
+      trackOutline: trackOutline ?? this.trackOutline,
+      trackOutlineSession: trackOutlineSession ?? this.trackOutlineSession,
     );
   }
 }
@@ -274,6 +295,7 @@ class AppContextCubit extends Cubit<AppContextState> {
       await _loadHistoryAndPredictions();
       emit(state.copyWith(status: LoadStatus.success));
       _watchLiveSession();
+      unawaited(_loadTrackOutline(liveSession ?? latestSession));
     } on OpenF1Exception catch (e) {
       emit(state.copyWith(status: LoadStatus.error, error: e));
     } catch (_) {
@@ -473,6 +495,50 @@ class AppContextCubit extends Cubit<AppContextState> {
       return await repository.sessionResults(sessionKey: sessionKey);
     } on OpenF1Exception {
       return const [];
+    }
+  }
+
+  Future<void> _loadTrackOutline(Session? session) async {
+    if (session == null || isClosed) return;
+    try {
+      final now = DateTime.now().toUtc();
+      Session? source;
+      final done = state.currentSessions
+          .where((s) => !s.isCancelled && s.dateEnd.isBefore(now))
+          .toList();
+      if (done.isNotEmpty) source = done.last;
+      source ??= await repository.lastCompletedRace(year: session.year);
+      if (source == null || source.circuitKey != session.circuitKey) return;
+      List<Driver> roster = const [];
+      try {
+        roster = await repository.drivers(sessionKey: source.sessionKey);
+      } on OpenF1Exception {
+        roster = state.drivers;
+      }
+      if (roster.isEmpty) return;
+      final duration = source.dateEnd.difference(source.dateStart);
+      final mid = source.dateStart.add(
+        Duration(minutes: duration.inMinutes > 10 ? (duration.inMinutes * 0.65).round() : 0),
+      );
+      final from = mid.toUtc().toIso8601String();
+      final to = mid.add(const Duration(minutes: 2)).toUtc().toIso8601String();
+      for (final driver in roster.take(5)) {
+        try {
+          final points = await repository.locations(
+            sessionKey: source.sessionKey,
+            driverNumber: driver.driverNumber,
+            dateGt: from,
+            dateLt: to,
+          );
+          if (points.length < 16 || isClosed) continue;
+          emit(state.copyWith(trackOutline: points, trackOutlineSession: source));
+          return;
+        } on OpenF1Exception {
+          continue;
+        }
+      }
+    } on OpenF1Exception {
+      // outline is optional
     }
   }
 

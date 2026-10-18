@@ -125,6 +125,39 @@ class AppStrings {
   String get status => isRu ? 'Статус' : 'Status';
   String get compound => isRu ? 'Состав' : 'Compound';
   String get searchHint => isRu ? 'Пилот, команда, этап' : 'Driver, team, meeting';
+  String get sessionLive => 'LIVE';
+  String get sessionFinished => isRu ? 'Завершено' : 'Finished';
+  String get sessionUpcoming => isRu ? 'Скоро' : 'Upcoming';
+  String get dataFresh => isRu ? 'Данные актуальны' : 'Data is current';
+  String get dataFromSession => isRu ? 'Данные сессии' : 'Session data';
+  String get predictedWinner => isRu ? 'Прогноз победителя' : 'Predicted winner';
+  String get nextGrandPrix => isRu ? 'Следующий Гран-при' : 'Next Grand Prix';
+  String get lastLeader => isRu ? 'Лидер сессии' : 'Session leader';
+  String get circuit => isRu ? 'Трасса' : 'Circuit';
+  String get timeToSession => isRu ? 'До сессии' : 'Until session';
+  String get winModelHint => isRu
+      ? 'Naive Bayes по сетке, чемпионату и последним гонкам. Не зависит от LIVE.'
+      : 'Naive Bayes from grid, championship and recent races. Independent of LIVE.';
+  String get carsOnTrack => isRu ? 'Машины по GPS' : 'Cars from GPS';
+  String get trackOutlineOnly => isRu
+      ? 'Схема по координатам сессии. Движение машин только при живых GPS.'
+      : 'Layout from session coordinates. Car motion only with live GPS.';
+  String get startFinish => isRu ? 'Старт / финиш' : 'Start / finish';
+  String get lastLap => isRu ? 'Последний' : 'Last';
+  String get bestLap => isRu ? 'Лучший' : 'Best';
+  String get sector1 => 'S1';
+  String get sector2 => 'S2';
+  String get sector3 => 'S3';
+  String get recentRace => isRu ? 'Последний этап' : 'Latest meeting';
+  String get viewResults => isRu ? 'Все результаты' : 'Full results';
+  String get predictedFor => isRu ? 'Прогноз на' : 'Prediction for';
+  String get noWinModel => isRu
+      ? 'Недостаточно истории для расчёта вероятности победы.'
+      : 'Not enough history to calculate a win probability.';
+  String get tapDriver => isRu ? 'Выберите пилота на карте или в таблице' : 'Select a driver on the map or table';
+  String get weatherAir => isRu ? 'Воздух' : 'Air';
+  String get mapLegend => isRu ? 'Пилоты на трассе' : 'Drivers on track';
+  String get constructorsShort => isRu ? 'Кубок конструкторов' : 'Constructors';
 
   String featureLabel(String id) {
     switch (id) {
