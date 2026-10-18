@@ -34,17 +34,16 @@ class AppTheme {
         color: AppColors.card,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
       dividerColor: AppColors.line,
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.card,
-        indicatorColor: AppColors.red.withValues(alpha: 0.12),
-      ),
     );
   }
 
   static ThemeData dark() {
+    const canvas = AppColors.ink;
+    const card = AppColors.panel;
+    const text = AppColors.textDark;
     final base = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -52,33 +51,32 @@ class AppTheme {
         seedColor: AppColors.red,
         brightness: Brightness.dark,
         primary: AppColors.red,
-        surface: AppColors.canvasDark,
+        surface: canvas,
       ),
     );
     final theme = GoogleFonts.manropeTextTheme(base.textTheme).apply(
-      bodyColor: AppColors.textDark,
-      displayColor: AppColors.textDark,
+      bodyColor: text,
+      displayColor: text,
     );
     return base.copyWith(
       textTheme: theme,
-      scaffoldBackgroundColor: AppColors.canvasDark,
+      scaffoldBackgroundColor: canvas,
       appBarTheme: AppBarTheme(
-        backgroundColor: AppColors.cardDark,
-        foregroundColor: AppColors.textDark,
+        backgroundColor: card,
+        foregroundColor: text,
         elevation: 0,
         titleTextStyle: theme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
       ),
       cardTheme: CardThemeData(
-        color: AppColors.cardDark,
+        color: card,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.lineDark),
+        ),
       ),
       dividerColor: AppColors.lineDark,
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: AppColors.cardDark,
-        indicatorColor: AppColors.red.withValues(alpha: 0.18),
-      ),
     );
   }
 }

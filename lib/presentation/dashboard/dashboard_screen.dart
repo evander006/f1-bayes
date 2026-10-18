@@ -1,161 +1,280 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/l10n/app_strings.dart';
 import '../../core/l10n/locale_scope.dart';
-import '../../domain/models/prediction_models.dart';
+import '../../data/models/openf1_models.dart';
+import '../../data/repositories/openf1_repository.dart';
+import '../../domain/weekend_status.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/app_context_cubit.dart';
+import '../bloc/dashboard_board_cubit.dart';
 import '../bloc/live_timing_cubit.dart';
+import '../bloc/load_status.dart';
 import '../search/search_screen.dart';
 import '../widgets/async_states.dart';
-import '../widgets/live_timing_table.dart';
+import 'dash_theme.dart';
+import 'driver_focus.dart';
 import 'overview_cards.dart';
 import 'recent_results.dart';
+import 'standings_panel.dart';
+import 'timing_table.dart';
 import 'track_panel.dart';
-import 'weather_strip.dart';
 import 'weekend_header.dart';
 import 'win_probability_panel.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, this.compact = false});
 
   final bool compact;
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (context) => DashboardBoardCubit(context.read<OpenF1Repository>()),
+      child: _DashboardHost(compact: compact),
+    );
+  }
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  int? _selectedDriver;
+class _DashboardHost extends StatefulWidget {
+  const _DashboardHost({required this.compact});
 
-  void _select(int? number) {
-    setState(() => _selectedDriver = number);
+  final bool compact;
+
+  @override
+  State<_DashboardHost> createState() => _DashboardHostState();
+}
+
+class _DashboardHostState extends State<_DashboardHost> {
+  int? _selected;
+  bool _gridView = false;
+  bool _refreshing = false;
+  Timer? _phaseTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _phaseTimer = Timer.periodic(const Duration(seconds: 15), (_) => _syncBoard());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncBoard());
+  }
+
+  @override
+  void dispose() {
+    _phaseTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncBoard() {
+    if (!mounted) return;
+    final store = context.read<AppContextCubit>().state;
+    if (store.status == LoadStatus.success) {
+      context.read<DashboardBoardCubit>().load(store);
+    }
+    setState(() {});
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _refreshing = true);
+    await context.read<AppContextCubit>().load();
+    if (mounted) setState(() => _refreshing = false);
+  }
+
+  Session? _active(AppContextState store) {
+    final now = DateTime.now().toUtc();
+    return activeSession(store.currentSessions, now) ??
+        (store.latestSession != null && sessionIsActive(store.latestSession!, now) ? store.latestSession : null);
   }
 
   @override
   Widget build(BuildContext context) {
-    final s = LocaleScope.stringsOf(context);
-    return BlocBuilder<AppContextCubit, AppContextState>(
-      builder: (context, store) {
-        return AsyncBody(
-          status: store.status,
-          strings: s,
-          error: store.error,
-          onRetry: context.read<AppContextCubit>().load,
-          child: BlocBuilder<LiveTimingCubit, LiveTimingState>(
-            builder: (context, live) {
-              final padding = EdgeInsets.fromLTRB(
-                widget.compact ? 12 : 20,
-                12,
-                widget.compact ? 12 : 20,
-                24,
-              );
-              final sessionLabel =
-                  '${store.featuredSession?.sessionName ?? ''} · ${store.featuredSession?.location ?? ''}';
-              final timing = LiveTimingTable(
-                strings: s,
-                rows: live.rows.isNotEmpty
-                    ? live.rows
-                    : [
-                        for (final result in store.latestResults)
-                          if (store.driverByNumber(result.driverNumber) != null)
-                            LiveClassificationRow(
-                              driver: store.driverByNumber(result.driverNumber)!,
-                              position: result.position,
-                            ),
-                      ],
-                sessionLabel: live.rows.isNotEmpty
-                    ? sessionLabel
-                    : '${s.results} · ${store.latestSession?.sessionName ?? ''}',
-                selectedDriverNumber: _selectedDriver,
-                onDriverSelected: _select,
-                compact: widget.compact,
-              );
-
-              final track = TrackPanel(
-                store: store,
-                live: live,
-                strings: s,
-                compact: widget.compact,
-                selectedDriverNumber: _selectedDriver,
-                onDriverSelected: _select,
-              );
-
-              final side = Column(
-                children: [
-                  WinProbabilityPanel(
-                    store: store,
-                    strings: s,
-                    selectedDriverNumber: _selectedDriver,
+    final strings = LocaleScope.stringsOf(context);
+    return BlocListener<AppContextCubit, AppContextState>(
+      listenWhen: (previous, next) =>
+          previous.status != next.status ||
+          previous.refreshedAt != next.refreshedAt ||
+          previous.latestSession?.sessionKey != next.latestSession?.sessionKey,
+      listener: (context, state) {
+        if (state.status == LoadStatus.success) {
+          context.read<DashboardBoardCubit>().load(state);
+        }
+      },
+      child: BlocBuilder<AppContextCubit, AppContextState>(
+        builder: (context, store) {
+          final active = _active(store);
+          final page = _DashboardBody(
+            compact: widget.compact,
+            store: store,
+            strings: strings,
+            refreshing: _refreshing,
+            gridView: _gridView,
+            selected: _selected,
+            liveAttached: active != null,
+            onRefresh: _refresh,
+            onSearch: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
+            ),
+            onGrid: (value) => setState(() => _gridView = value),
+            onSelect: (number) => setState(() {
+              _selected = _selected == number ? null : number;
+            }),
+          );
+          return AsyncBody(
+            status: store.status,
+            strings: strings,
+            error: store.error,
+            onRetry: _refresh,
+            child: active == null
+                ? page
+                : BlocProvider(
+                    key: ValueKey(active.sessionKey),
+                    create: (context) => LiveTimingCubit(context.read<OpenF1Repository>())
+                      ..start(
+                        session: active,
+                        drivers: store.drivers,
+                        fallback: active.sessionKey == store.latestSession?.sessionKey ? store.latestResults : const [],
+                      ),
+                    child: page,
                   ),
-                  const SizedBox(height: 10),
-                  WeatherStrip(store: store, strings: s),
-                ],
-              );
+          );
+        },
+      ),
+    );
+  }
+}
 
-              return ListView(
-                padding: padding,
-                children: [
-                  ScreenTitle(
-                    title: s.dashboard,
-                    onSearch: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SearchScreen()),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  WeekendHeader(store: store, live: live, strings: s),
-                  const SizedBox(height: 10),
-                  RaceOverviewCards(
-                    store: store,
-                    live: live,
-                    strings: s,
-                    compact: widget.compact,
-                  ),
-                  const SizedBox(height: 10),
-                  if (widget.compact) ...[
-                    track,
-                    const SizedBox(height: 10),
-                    timing,
-                    const SizedBox(height: 10),
-                    side,
-                    const SizedBox(height: 10),
-                    RecentRaceResults(store: store, strings: s),
-                    const SizedBox(height: 10),
-                    ChampionshipStrip(store: store, strings: s),
-                  ] else ...[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 7,
-                          child: Column(
-                            children: [
-                              track,
-                              const SizedBox(height: 10),
-                              timing,
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(flex: 3, child: side),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: RecentRaceResults(store: store, strings: s)),
-                        const SizedBox(width: 12),
-                        Expanded(child: ChampionshipStrip(store: store, strings: s)),
-                      ],
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
+class _DashboardBody extends StatelessWidget {
+  const _DashboardBody({
+    required this.compact,
+    required this.store,
+    required this.strings,
+    required this.refreshing,
+    required this.gridView,
+    required this.selected,
+    required this.liveAttached,
+    required this.onRefresh,
+    required this.onSearch,
+    required this.onGrid,
+    required this.onSelect,
+  });
+
+  final bool compact;
+  final AppContextState store;
+  final AppStrings strings;
+  final bool refreshing;
+  final bool gridView;
+  final int? selected;
+  final bool liveAttached;
+  final VoidCallback onRefresh;
+  final VoidCallback onSearch;
+  final ValueChanged<bool> onGrid;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!liveAttached) {
+      return BlocBuilder<DashboardBoardCubit, BoardState>(
+        builder: (context, board) => _frame(context, board, null),
+      );
+    }
+    return BlocBuilder<DashboardBoardCubit, BoardState>(
+      builder: (context, board) {
+        return BlocBuilder<LiveTimingCubit, LiveTimingState>(
+          builder: (context, live) => _frame(context, board, live),
         );
       },
+    );
+  }
+
+  Widget _frame(BuildContext context, BoardState board, LiveTimingState? live) {
+    final wide = !compact && MediaQuery.sizeOf(context).width >= 1100;
+    final main = Column(
+      children: [
+        TrackPanel(
+          store: store,
+          board: board,
+          strings: strings,
+          compact: !wide,
+          live: live,
+          selectedDriver: selected,
+          onSelect: onSelect,
+        ),
+        const SizedBox(height: 10),
+        LiveTimingTable(
+          store: store,
+          board: board,
+          strings: strings,
+          compact: !wide,
+          gridView: gridView,
+          onToggle: onGrid,
+          live: live,
+          selectedDriver: selected,
+          onSelect: onSelect,
+        ),
+      ],
+    );
+    final side = Column(
+      children: [
+        WinProbabilityPanel(
+          store: store,
+          strings: strings,
+          selectedDriver: selected,
+          onSelect: onSelect,
+        ),
+        const SizedBox(height: 10),
+        DriverFocus(store: store, board: board, strings: strings, selectedDriver: selected),
+        const SizedBox(height: 10),
+        ConditionsCard(store: store, board: board, strings: strings),
+      ],
+    );
+
+    return FadeIn(
+      child: ListView(
+        padding: EdgeInsets.fromLTRB(wide ? 20 : 12, 12, wide ? 20 : 12, 24),
+        children: [
+          WeekendHeader(
+            store: store,
+            strings: strings,
+            refreshing: refreshing,
+            onRefresh: onRefresh,
+            onSearch: onSearch,
+          ),
+          const SizedBox(height: 10),
+          RaceOverviewCards(store: store, strings: strings),
+          const SizedBox(height: 10),
+          if (wide)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 8, child: main),
+                const SizedBox(width: 10),
+                Expanded(flex: 4, child: side),
+              ],
+            )
+          else ...[
+            main,
+            const SizedBox(height: 10),
+            side,
+          ],
+          const SizedBox(height: 10),
+          if (wide)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: RecentRaceResults(store: store, board: board, strings: strings)),
+                const SizedBox(width: 10),
+                Expanded(child: ChampionshipStandings(store: store, strings: strings)),
+              ],
+            )
+          else ...[
+            RecentRaceResults(store: store, board: board, strings: strings),
+            const SizedBox(height: 10),
+            ChampionshipStandings(store: store, strings: strings),
+          ],
+        ],
+      ),
     );
   }
 }

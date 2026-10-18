@@ -1,95 +1,111 @@
 import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
-import '../../core/theme/app_colors.dart';
+import '../../data/models/openf1_models.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/app_context_cubit.dart';
-import '../bloc/live_timing_cubit.dart';
-import 'session_status.dart';
+import 'dash_theme.dart';
 
 class RaceOverviewCards extends StatelessWidget {
-  const RaceOverviewCards({
-    super.key,
-    required this.store,
-    required this.live,
-    required this.strings,
-    required this.compact,
-  });
+  const RaceOverviewCards({super.key, required this.store, required this.strings});
 
   final AppContextState store;
-  final LiveTimingState live;
   final AppStrings strings;
-  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final meeting = store.featuredMeeting;
-    final cards = <Widget>[
-      _Kpi(
-        label: strings.nextGrandPrix,
-        value: meeting?.meetingName ?? strings.noData,
-        hint: meeting == null ? null : '${meeting.location} · ${meeting.year}',
-      ),
-      _Kpi(
-        label: strings.circuit,
-        value: meeting?.circuitShortName.isNotEmpty == true
-            ? meeting!.circuitShortName
-            : strings.noData,
-        hint: meeting?.countryName,
-      ),
-      _Kpi(
-        label: strings.lastLeader,
-        value: _leaderName(),
-        hint: _leaderHint(),
-      ),
-      _Kpi(
-        label: strings.predictedWinner,
-        value: store.predictions.isEmpty ? strings.noData : store.predictions.first.driver.shortName,
-        hint: store.predictions.isEmpty ? null : percent(store.predictions.first.winProbability),
-      ),
-      _Kpi(
-        label: strings.timeToSession,
-        value: store.countdown == null ? strings.noData : formatCountdown(store.countdown!),
-        hint: store.nextUpcomingSession?.sessionName,
-      ),
-    ];
-
-    if (compact) {
-      return SizedBox(
-        height: 96,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: cards.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (_, i) => SizedBox(width: 180, child: cards[i]),
-        ),
-      );
-    }
-    return Row(
-      children: [
-        for (var i = 0; i < cards.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
-          Expanded(child: cards[i]),
-        ],
-      ],
+    final tiles = _tiles();
+    if (tiles.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = width >= 1100 ? tiles.length.clamp(2, 6) : width >= 640 ? 3 : 2;
+        final tileWidth = (width - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+          ],
+        );
+      },
     );
   }
 
-  String _leaderName() {
-    if (live.rows.isNotEmpty) return live.rows.first.driver.shortName;
-    if (store.latestResults.isEmpty) return strings.noData;
-    return store.driverByNumber(store.latestResults.first.driverNumber)?.shortName ??
-        '#${store.latestResults.first.driverNumber}';
+  List<Widget> _tiles() {
+    final tiles = <Widget>[];
+    final meeting = store.displayedMeeting;
+    if (meeting != null) {
+      tiles.add(_Metric(label: strings.nextRace, value: meeting.meetingName, hint: meeting.countryName));
+      if (meeting.circuitShortName.isNotEmpty) {
+        tiles.add(_Metric(label: strings.circuit, value: meeting.circuitShortName, hint: meeting.location));
+      }
+    }
+
+    final latest = store.latestSession;
+    final leader = _leader();
+    if (latest != null &&
+        latest.isRace &&
+        latest.dateEnd.toUtc().isBefore(DateTime.now().toUtc()) &&
+        leader != null &&
+        leader.numberOfLaps != null) {
+      tiles.add(_Metric(
+        label: strings.raceLaps,
+        value: '${leader.numberOfLaps}',
+        hint: latest.sessionName,
+      ));
+    }
+    if (leader != null) {
+      final driver = store.driverByNumber(leader.driverNumber);
+      tiles.add(_Metric(
+        label: strings.leader,
+        value: driver?.nameAcronym.isNotEmpty == true ? driver!.nameAcronym : '#${leader.driverNumber}',
+        hint: store.latestSession?.sessionName,
+      ));
+    }
+
+    StartingGrid? pole;
+    for (final row in store.latestGrid) {
+      if (row.position == 1) pole = row;
+    }
+    if (pole != null) {
+      final driver = store.driverByNumber(pole.driverNumber);
+      tiles.add(_Metric(
+        label: strings.pole,
+        value: driver?.nameAcronym.isNotEmpty == true ? driver!.nameAcronym : '#${pole.driverNumber}',
+        hint: strings.qualifyingGrid,
+      ));
+    }
+
+    if (store.predictions.isNotEmpty && store.forecastMeeting != null) {
+      final top = store.predictions.first;
+      tiles.add(_Metric(
+        label: strings.raceWin,
+        value: percent(top.winProbability),
+        hint: top.driver.nameAcronym.isEmpty ? top.driver.shortName : top.driver.nameAcronym,
+      ));
+    }
+
+    if (store.countdown != null && store.nextSession != null) {
+      tiles.add(_Metric(
+        label: strings.timeToSession,
+        value: formatCountdown(store.countdown!, isRu: strings.isRu),
+        hint: store.nextSession!.sessionName,
+      ));
+    }
+    return tiles;
   }
 
-  String? _leaderHint() {
-    if (live.rows.isNotEmpty) return store.liveSession?.sessionName ?? store.latestSession?.sessionName;
-    return store.latestSession?.sessionName;
+  SessionResult? _leader() {
+    for (final result in store.latestResults) {
+      if (result.position == 1) return result;
+    }
+    return null;
   }
 }
 
-class _Kpi extends StatelessWidget {
-  const _Kpi({required this.label, required this.value, this.hint});
+class _Metric extends StatelessWidget {
+  const _Metric({required this.label, required this.value, this.hint});
 
   final String label;
   final String value;
@@ -98,11 +114,11 @@ class _Kpi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return F1Card(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Eyebrow(label, color: AppColors.mutedDark),
+          Eyebrow(label),
           const SizedBox(height: 6),
           Text(
             value,
@@ -110,12 +126,12 @@ class _Kpi extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
-          if (hint != null)
+          if (hint != null && hint!.isNotEmpty)
             Text(
               hint!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Theme.of(context).hintColor, fontSize: 11),
+              style: TextStyle(color: DashColors.muted(context), fontSize: 12),
             ),
         ],
       ),

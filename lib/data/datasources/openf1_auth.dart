@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:f1_app/data/datasources/openf1_secrets.example.dart';
 
-import 'openf1_secrets.dart';
 import '../openf1_exception.dart';
 
 class OpenF1Auth {

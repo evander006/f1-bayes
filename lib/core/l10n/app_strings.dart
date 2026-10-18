@@ -159,6 +159,129 @@ class AppStrings {
   String get mapLegend => isRu ? 'Пилоты на трассе' : 'Drivers on track';
   String get constructorsShort => isRu ? 'Кубок конструкторов' : 'Constructors';
 
+  String get liveNow => 'LIVE';
+  String get practice => isRu ? 'Практика' : 'Practice';
+  String get qualifying => isRu ? 'Квалификация' : 'Qualifying';
+  String get sprint => isRu ? 'Спринт' : 'Sprint';
+  String get sprintQualifying => isRu ? 'Спринт-квалификация' : 'Sprint Qualifying';
+  String get race => isRu ? 'Гонка' : 'Race';
+  String get finished => isRu ? 'Завершено' : 'Finished';
+  String get sessionGeneric => isRu ? 'Сессия' : 'Session';
+  String get nextSession => isRu ? 'Следующая сессия' : 'Next session';
+  String get updated => isRu ? 'Обновлено' : 'Updated';
+  String get noCircuit => isRu ? 'Схема трассы недоступна' : 'Circuit layout unavailable';
+  String get layoutFromLap => isRu
+      ? 'Контур построен по кругу из координат OpenF1'
+      : 'Outline traced from an OpenF1 location lap';
+  String get layoutStatic => isRu
+      ? 'Схема трассы. Машины не поставлены на карту: нет общей системы координат.'
+      : 'Schematic layout. Cars are not plotted without a shared coordinate frame.';
+  String get positionsSnapshot => isRu ? 'Позиции на момент' : 'Positions at';
+  String get carPositionsUnavailable =>
+      isRu ? 'Координаты машин недоступны' : 'Car coordinates unavailable';
+  String get winForecast => isRu ? 'Прогноз победы в гонке' : 'Race win forecast';
+  String get raceWin => isRu ? 'Вероятность победы в гонке' : 'Race win probability';
+  String get noUpcomingGp =>
+      isRu ? 'В календаре нет следующего Гран-при' : 'No upcoming Grand Prix is listed';
+  String get formOutlook => isRu ? 'Оценка по текущей форме' : 'Outlook from current form';
+  String get forecastEmpty => isRu
+      ? 'Недостаточно данных, чтобы посчитать вероятность победы'
+      : 'Not enough data to calculate a win probability';
+  String get noEntryList => isRu
+      ? 'Нет списка пилотов для расчёта'
+      : 'No driver entry list is available for this forecast';
+  String get basisGrid => isRu ? 'Стартовая решётка целевого Гран-при' : 'Starting grid of the target Grand Prix';
+  String get basisChampionship => isRu
+      ? 'Позиции чемпионата — решётка ещё не опубликована'
+      : 'Championship positions — the grid is not published yet';
+  String get basisResults => isRu
+      ? 'Позиции последней сессии'
+      : 'Latest session classification';
+  String get basisNone => isRu ? 'Нет позиций для модели' : 'No position input for the model';
+  String get wetFlag => isRu ? 'Мокрая сессия' : 'Wet session';
+  String get dryFlag => isRu ? 'Сухая сессия' : 'Dry session';
+  String get rainUnknown => isRu ? 'Дождь не задан' : 'Rain flag not set';
+  String get racesUsed => isRu ? 'гонок в истории модели' : 'races in the model history';
+  String get entryListFrom => isRu ? 'Состав' : 'Entry list';
+  String get viewForecast => isRu ? 'Весь прогноз' : 'Full forecast';
+  String get previousGp => isRu ? 'Прошлый Гран-при' : 'Previous Grand Prix';
+  String get podium => isRu ? 'Первая тройка' : 'Top three';
+  String get standingsChange => isRu ? 'Изменения в чемпионате' : 'Championship changes';
+  String get s1 => 'S1';
+  String get s2 => 'S2';
+  String get s3 => 'S3';
+  String get interval => isRu ? 'Интервал' : 'Interval';
+  String get lapsShort => isRu ? 'Круги' : 'Laps';
+  String get onTrack => isRu ? 'На трассе' : 'On track';
+  String get retired => isRu ? 'Сход' : 'Retired';
+  String get classified => isRu ? 'В протоколе' : 'Classified';
+  String get selectDriver => isRu ? 'Выберите пилота на карте или в таблице' : 'Select a driver on the map or in the table';
+  String get leader => isRu ? 'Лидер' : 'Leader';
+  String get raceLaps => isRu ? 'Круги гонки' : 'Race laps';
+  String get refresh => isRu ? 'Обновить' : 'Refresh';
+  String get flags => isRu ? 'Флаги' : 'Flags';
+  String get conditions => isRu ? 'Условия' : 'Conditions';
+  String get notLive => isRu ? 'Сейчас нет активной сессии' : 'No session is in progress';
+  String get gridView => isRu ? 'Решётка' : 'Grid';
+  String get timingView => isRu ? 'Хронометраж' : 'Timing';
+  String get calculatedAt => isRu ? 'Расчёт' : 'Calculated';
+  String get numberSign => '№';
+  String get teamCol => isRu ? 'Команда' : 'Team';
+  String get forecastFor => isRu ? 'Следующий Гран-при' : 'Next Grand Prix';
+  String get thisWeekend => isRu ? 'Текущий уик-энд' : 'This weekend';
+  String get noDelta => isRu ? 'Сдвигов позиций нет' : 'No position changes recorded';
+
+  String phaseLabel(String code) {
+    switch (code) {
+      case 'practice':
+        return practice;
+      case 'qualifying':
+        return qualifying;
+      case 'sprintQualifying':
+        return sprintQualifying;
+      case 'sprint':
+        return sprint;
+      case 'race':
+        return race;
+      case 'finished':
+        return finished;
+      case 'upcoming':
+        return upcoming;
+      default:
+        return sessionGeneric;
+    }
+  }
+
+  String basisLabel(String basis) {
+    switch (basis) {
+      case 'starting_grid':
+        return basisGrid;
+      case 'championship':
+        return basisChampionship;
+      case 'latest_results':
+        return basisResults;
+      default:
+        return basisNone;
+    }
+  }
+
+  String driverStatusLabel(String status) {
+    switch (status) {
+      case 'on_track':
+        return onTrack;
+      case 'retired':
+        return retired;
+      case 'dns':
+        return 'DNS';
+      case 'dsq':
+        return 'DSQ';
+      case 'classified':
+        return classified;
+      default:
+        return '—';
+    }
+  }
+
   String featureLabel(String id) {
     switch (id) {
       case 'prior':

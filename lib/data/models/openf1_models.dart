@@ -364,6 +364,7 @@ class Lap {
     this.i1Speed,
     this.i2Speed,
     this.stSpeed,
+    this.dateStart,
   });
 
   final int meetingKey;
@@ -378,6 +379,7 @@ class Lap {
   final double? i1Speed;
   final double? i2Speed;
   final double? stSpeed;
+  final DateTime? dateStart;
 
   factory Lap.fromJson(Map<String, dynamic> json) => Lap(
         meetingKey: asInt(json['meeting_key']) ?? 0,
@@ -392,6 +394,7 @@ class Lap {
         i1Speed: asDouble(json['i1_speed']),
         i2Speed: asDouble(json['i2_speed']),
         stSpeed: asDouble(json['st_speed']),
+        dateStart: asDate(json['date_start']),
       );
 }
 
