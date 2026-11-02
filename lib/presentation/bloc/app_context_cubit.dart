@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../data/models/openf1_models.dart';
 import '../../data/openf1_exception.dart';
 import '../../data/repositories/openf1_repository.dart';
 import '../../domain/bayes/naive_bayes_predictor.dart';
+import '../../domain/bayes/race_history.dart';
 import '../../domain/models/prediction_models.dart';
 import '../../domain/weekend_status.dart';
 import 'load_status.dart';
@@ -68,18 +70,8 @@ class AppContextState {
     return null;
   }
 
-  Map<int, int> get effectiveGrid {
-    if (grid.isNotEmpty) {
-      return {for (final row in grid) row.driverNumber: row.position};
-    }
-    if (driverStandings.isNotEmpty) {
-      return {
-        for (final row in driverStandings)
-          if (row.positionCurrent != null) row.driverNumber: row.positionCurrent!,
-      };
-    }
-    return {for (final row in latestResults) row.driverNumber: row.position};
-  }
+  /// Published starting grid only. Championship order is not a grid.
+  Map<int, int> get effectiveGrid => gridByDriver(grid);
 
   Map<int, double> get championshipPoints => {
         for (final row in driverStandings)
@@ -308,11 +300,13 @@ class AppContextCubit extends Cubit<AppContextState> {
 
       final weatherRows = await repository.weather(sessionKey: latestSession.sessionKey);
       final latestResults = await _safeResults(latestSession.sessionKey);
-      Object latestGridKey = latestSession.sessionKey;
+      Session? currentRace;
       for (final session in currentSessions) {
-        if (session.isRace) latestGridKey = session.sessionKey;
+        if (!session.isCancelled && session.sessionName == 'Race') currentRace = session;
       }
-      final latestGrid = await _safeGrid(latestGridKey);
+      final latestGrid = currentRace == null
+          ? await _safeGrid(latestSession.sessionKey)
+          : await _loadRaceGrid(currentRace);
       final forecastMeeting = forecastTargetMeeting(
         current: currentMeeting,
         upcoming: upcoming,
@@ -472,38 +466,44 @@ class AppContextCubit extends Cubit<AppContextState> {
     for (final race in sample) {
       try {
         final results = await repository.sessionResults(sessionKey: race.sessionKey);
-        if (results.isEmpty) continue;
-        final winner = results.first.driverNumber;
-        final gridRows = await _safeGrid(race.sessionKey);
+        if (results.isEmpty) {
+          debugPrint('Гонка ${race.sessionKey}: нет результатов, пропуск');
+          continue;
+        }
+        final gridRows = await _loadRaceGrid(race);
         final weatherRows = await repository.weather(sessionKey: race.sessionKey);
         final rain = weatherRows.any((w) => w.isWet);
-        StartingGrid? pole;
-        for (final g in gridRows) {
-          if (g.position == 1) {
-            pole = g;
-            break;
-          }
-        }
-        final poleNumber = pole?.driverNumber;
-        final gridMap = {for (final g in gridRows) g.driverNumber: g.position};
-        evidence.add(RaceEvidence(
-          winner: winner,
-          pole: poleNumber,
+        final built = buildRaceEvidence(
+          results: results,
+          startingGrid: gridRows,
           rain: rain,
-          leaderDnf: results.any((r) => r.dnf && (r.position == 1 || r.driverNumber == poleNumber)),
-          gridPositions: gridMap,
-        ));
+        );
+        if (built == null) {
+          debugPrint(
+            'Гонка ${race.sessionKey}: нет достоверного победителя '
+            '(${results.length} строк), запись не добавлена',
+          );
+          continue;
+        }
+        final matched = state.drivers.where((driver) => built.started(driver.driverNumber)).length;
+        debugPrint(
+          'Гонка ${race.sessionKey}: winner=#${built.winner}, '
+          'grid=${built.gridPositions.length}, starters=${built.starters.length}, '
+          'совпало с составом=$matched',
+        );
+        evidence.add(built);
 
         Meeting? meeting;
         for (final m in state.meetings) {
           if (m.meetingKey == race.meetingKey) meeting = m;
         }
+        final winner = built.winner;
         final winnerDriver = state.driverByNumber(winner);
         if (meeting != null && winnerDriver != null && evidence.length > 1) {
           final predicted = NaiveBayesPredictor().predict(
             drivers: state.drivers,
             history: evidence.sublist(0, evidence.length - 1),
-            currentGrid: gridMap,
+            currentGrid: built.gridPositions,
             rain: rain,
           );
           if (predicted.isNotEmpty) {
@@ -521,7 +521,8 @@ class AppContextCubit extends Cubit<AppContextState> {
             ));
           }
         }
-      } on OpenF1Exception {
+      } on OpenF1Exception catch (error) {
+        debugPrint('Гонка ${race.sessionKey}: $error');
         continue;
       }
     }
@@ -561,9 +562,8 @@ class AppContextCubit extends Cubit<AppContextState> {
   }
 
   String _forecastBasis(AppContextState snapshot) {
-    if (snapshot.grid.isNotEmpty) return 'starting_grid';
-    if (snapshot.driverStandings.any((row) => row.positionCurrent != null)) return 'championship';
-    if (snapshot.latestResults.isNotEmpty) return 'latest_results';
+    if (snapshot.effectiveGrid.isNotEmpty) return 'starting_grid';
+    if (snapshot.championshipPoints.isNotEmpty) return 'championship';
     return 'none';
   }
 
@@ -578,11 +578,58 @@ class AppContextCubit extends Cubit<AppContextState> {
       final sessions = await repository.sessions(meetingKey: target.meetingKey);
       Session? race;
       for (final session in sessions) {
-        if (session.isRace && !session.isCancelled) race = session;
+        if (session.sessionName == 'Race' && !session.isCancelled) race = session;
       }
       if (race == null) return const [];
-      return await _safeGrid(race.sessionKey);
-    } on OpenF1Exception {
+      return await _loadRaceGrid(race);
+    } on OpenF1Exception catch (error) {
+      debugPrint('forecast grid meeting=${target.meetingKey}: $error');
+      return const [];
+    }
+  }
+
+  Future<List<StartingGrid>> _loadRaceGrid(Session race) async {
+    final official = await _safeGrid(race.sessionKey);
+    final usable = [
+      for (final row in official)
+        if (row.driverNumber > 0 && row.position > 0) row,
+    ];
+    if (usable.isNotEmpty) return usable;
+
+    final qualifying = await _qualifyingClassification(race.meetingKey);
+    final derived = gridFromClassification(
+      qualifying,
+      meetingKey: race.meetingKey,
+      sessionKey: race.sessionKey,
+    );
+    if (derived.isEmpty) {
+      debugPrint(
+        'Гонка ${race.sessionKey}: стартовая решётка недоступна, '
+        'результат сохранится без позиций',
+      );
+    } else {
+      debugPrint(
+        'Гонка ${race.sessionKey}: решётка из квалификации, ${derived.length} гонщиков',
+      );
+    }
+    return derived;
+  }
+
+  Future<List<SessionResult>> _qualifyingClassification(int meetingKey) async {
+    try {
+      final sessions = await repository.sessions(meetingKey: meetingKey);
+      Session? qualifying;
+      for (final session in sessions) {
+        if (session.isCancelled) continue;
+        if (session.sessionName == 'Qualifying') qualifying = session;
+      }
+      if (qualifying == null) {
+        debugPrint('Квалификация meeting=$meetingKey: сессия не найдена');
+        return const [];
+      }
+      return await repository.sessionResults(sessionKey: qualifying.sessionKey);
+    } on OpenF1Exception catch (error) {
+      debugPrint('Квалификация meeting=$meetingKey: $error');
       return const [];
     }
   }
@@ -647,8 +694,11 @@ class AppContextCubit extends Cubit<AppContextState> {
 
   Future<List<StartingGrid>> _safeGrid(Object sessionKey) async {
     try {
-      return await repository.startingGrid(sessionKey: sessionKey);
-    } on OpenF1Exception {
+      final rows = await repository.startingGrid(sessionKey: sessionKey);
+      debugPrint('starting_grid session=$sessionKey: ${rows.length} строк');
+      return rows;
+    } on OpenF1Exception catch (error) {
+      debugPrint('starting_grid session=$sessionKey ошибка API: $error');
       return const [];
     }
   }

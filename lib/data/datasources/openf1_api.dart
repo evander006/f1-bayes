@@ -1,7 +1,17 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../openf1_exception.dart';
 import 'openf1_auth.dart';
+
+/// OpenF1 answers a missing collection with HTTP 404 and
+/// `{"detail":"No results found."}` instead of an empty list.
+bool openF1NoResults(int? statusCode, dynamic data) {
+  if (statusCode != 404 && statusCode != 200) return false;
+  if (data is! Map) return false;
+  final detail = data['detail']?.toString().toLowerCase() ?? '';
+  return detail.contains('no result');
+}
 
 class OpenF1Api {
   OpenF1Api({Dio? dio, OpenF1Auth? auth})
@@ -35,6 +45,10 @@ class OpenF1Api {
         },
       );
       final data = response.data;
+      if (openF1NoResults(response.statusCode, data)) {
+        debugPrint('OpenF1 $path: пустой ответ (${response.statusCode})');
+        return const [];
+      }
       if (data is! List) {
         throw OpenF1Exception.malformed();
       }
@@ -45,6 +59,10 @@ class OpenF1Api {
     } on OpenF1Exception {
       rethrow;
     } on DioException catch (error) {
+      if (openF1NoResults(error.response?.statusCode, error.response?.data)) {
+        debugPrint('OpenF1 $path: нет данных (${error.response?.statusCode})');
+        return const [];
+      }
       final wrapped = error.error;
       if (wrapped is OpenF1Exception) throw wrapped;
       throw _mapDio(error);

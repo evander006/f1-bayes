@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/l10n/app_strings.dart';
 import '../../core/theme/app_colors.dart';
+import '../../domain/bayes/naive_bayes_predictor.dart';
 import '../../widgets/ui_kit.dart';
 import '../bloc/app_context_cubit.dart';
 import '../predictions/predictions_screen.dart';
@@ -111,6 +112,10 @@ class WinProbabilityPanel extends StatelessWidget {
                   ),
                 ),
               ),
+          if (rows.isNotEmpty && predictionIsFlat(store.predictions)) ...[
+            const SizedBox(height: 4),
+            Text(strings.flatPrior, style: TextStyle(color: muted, fontSize: 12, height: 1.35)),
+          ],
           const SizedBox(height: 4),
           Text(
             [

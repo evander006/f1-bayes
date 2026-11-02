@@ -192,8 +192,11 @@ class AppStrings {
       : 'No driver entry list is available for this forecast';
   String get basisGrid => isRu ? 'Стартовая решётка целевого Гран-при' : 'Starting grid of the target Grand Prix';
   String get basisChampionship => isRu
-      ? 'Позиции чемпионата — решётка ещё не опубликована'
-      : 'Championship positions — the grid is not published yet';
+      ? 'Очки чемпионата — стартовая решётка ещё не опубликована'
+      : 'Championship points — the grid is not published yet';
+  String get flatPrior => isRu
+      ? 'Недостаточно данных, чтобы различить гонщиков. Показан равный априор.'
+      : 'Not enough evidence to separate the drivers. Showing a flat prior.';
   String get basisResults => isRu
       ? 'Позиции последней сессии'
       : 'Latest session classification';

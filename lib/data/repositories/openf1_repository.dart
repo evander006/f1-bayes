@@ -99,7 +99,7 @@ class OpenF1Repository {
       'session_key': sessionKey,
     });
     return rows.map(SessionResult.fromJson).toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+      ..sort((a, b) => _classificationRank(a.position).compareTo(_classificationRank(b.position)));
   }
 
   Future<List<StartingGrid>> startingGrid({required Object sessionKey}) async {
@@ -107,7 +107,7 @@ class OpenF1Repository {
       'session_key': sessionKey,
     });
     return rows.map(StartingGrid.fromJson).toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+      ..sort((a, b) => _classificationRank(a.position).compareTo(_classificationRank(b.position)));
   }
 
   Future<List<ChampionshipDriver>> championshipDrivers({
@@ -247,3 +247,6 @@ class _Cache {
   final Object data;
   final DateTime at;
 }
+
+/// Unclassified rows (null / "RT" parsed as 0) sort after the finish order.
+int _classificationRank(int position) => position > 0 ? position : 10000;

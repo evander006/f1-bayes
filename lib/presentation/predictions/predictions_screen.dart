@@ -63,7 +63,13 @@ class _PredictionsScreenState extends State<PredictionsScreen> {
               children: [
                 Eyebrow(s.winProbability),
                 const SizedBox(height: 10),
-                if (rows.isEmpty) Text(s.noData),
+                if (rows.isEmpty)
+                  Text(s.noData)
+                else if (predictionIsFlat(rows))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(s.flatPrior),
+                  ),
                 for (var i = 0; i < rows.length; i++)
                   InkWell(
                     onTap: () => Navigator.of(context).push(
